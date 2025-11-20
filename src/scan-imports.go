@@ -175,12 +175,23 @@ func main() {
 					if result.RepositoryID != 0 {
 						fmt.Printf("  - Repository ID: %d\n", result.RepositoryID)
 					}
-					if result.Repository != "" {
-						fmt.Printf("  - Repository: %s\n", result.Repository)
+					if result.Owner != "" && result.Name != "" {
+						fmt.Printf("  - Repository: %s/%s\n", result.Owner, result.Name)
 					}
-					if len(result.GeocodedLocation) > 0 {
-						fmt.Printf("  - Geocoded Locations: %d found\n", len(result.GeocodedLocation))
-						for _, loc := range result.GeocodedLocation {
+					if result.FociPresent {
+						fmt.Printf("  - FOCI Present: Yes\n")
+					}
+					if len(result.RepositoryFoci) > 0 {
+						fmt.Printf("  - Repository FOCI Locations: %d found\n", len(result.RepositoryFoci))
+						for _, loc := range result.RepositoryFoci {
+							if loc.CountryName != "" {
+								fmt.Printf("    - %s (%s)\n", loc.CountryName, loc.ISO3166Alpha2)
+							}
+						}
+					}
+					if len(result.UserFoci) > 0 {
+						fmt.Printf("  - User FOCI Locations: %d found\n", len(result.UserFoci))
+						for _, loc := range result.UserFoci {
 							if loc.CountryName != "" {
 								fmt.Printf("    - %s (%s)\n", loc.CountryName, loc.ISO3166Alpha2)
 							}
@@ -237,9 +248,31 @@ func isGitHubPackage(importPath string) bool {
 type PackageInfo struct {
 	ImportPath       string
 	RepositoryID     int64
-	Repository       string
-	GeocodedLocation []GeocodedPkgLocation
+	Owner            string
+	Name             string
+	Package          string
+	FociPresent      bool
+	RepositoryFoci   []GeocodedPkgLocation
+	UserFoci         []GeocodedLocation
 	Error            string
+}
+
+// GeocodedLocation represents user geocoded location data
+type GeocodedLocation struct {
+	Formatted              string `json:"formatted"`
+	CountryName            string `json:"country_name"`
+	ISO3166Alpha2          string `json:"iso_3166_alpha_2"`
+	ISO3166Alpha3          string `json:"iso_3166_alpha_3"`
+	Timestamp              string `json:"timestamp"`
+	Reason                 string `json:"reason"`
+	Latitude               string `json:"latitude"`
+	Longitude              string `json:"longitude"`
+	OpenStreetMapURL       string `json:"openstreetmaps_url"`
+	Timezone               string `json:"timezone"`
+	TimezoneOffset         string `json:"timezone_offset"`
+	OrganizationName       string `json:"organization_name"`
+	OrganizationDomain     string `json:"organization_domain"`
+	OrganizationGitHubRepo string `json:"organization_github_repo"`
 }
 
 // GeocodedPkgLocation represents geocoded location data
@@ -265,7 +298,8 @@ func queryHLTIAPI(client *http.Client, apiURL, token, importPath string) (*Packa
 	// For GitHub packages, use "go" as ecosystem and the full import path as package name
 	// URL encode the package name
 	encodedPackage := url.QueryEscape(importPath)
-	apiEndpoint := fmt.Sprintf("%s/package/go/%s?token=%s", strings.TrimSuffix(apiURL, "/"), encodedPackage, url.QueryEscape(token))
+	// Use the /foci/present endpoint
+	apiEndpoint := fmt.Sprintf("%s/foci/present/go/%s?token=%s", strings.TrimSuffix(apiURL, "/"), encodedPackage, url.QueryEscape(token))
 	
 	req, err := http.NewRequest("GET", apiEndpoint, nil)
 	if err != nil {
@@ -289,22 +323,43 @@ func queryHLTIAPI(client *http.Client, apiURL, token, importPath string) (*Packa
 		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
 	}
 	
-	// Parse the JSON response - matches GitHubPackageHistory structure
-	var apiResponse struct {
-		RepositoryID     int64                `json:"repository_id"`
-		Repository       string               `json:"repository"`
-		GeocodedLocation []GeocodedPkgLocation `json:"geocoded_location"`
+	// Parse the JSON response - GetPackagesFociResponse is a map[string]*PackageFoci
+	var apiResponse map[string]*struct {
+		RepoID    int64                `json:"repo_id"`
+		Owner     string               `json:"owner"`
+		Name      string               `json:"name"`
+		Package   string               `json:"package"`
+		Foci      bool                 `json:"foci"`
+		RepoFoci  []GeocodedPkgLocation `json:"repository_foci"`
+		UserFoci  []GeocodedLocation   `json:"user_foci"`
 	}
 	
 	if err := json.Unmarshal(body, &apiResponse); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 	
+	// Extract the package info from the map (key is the package name)
+	pkgInfo, exists := apiResponse[importPath]
+	if !exists {
+		// Try to find any entry in the map (in case the key is slightly different)
+		for _, info := range apiResponse {
+			pkgInfo = info
+			break
+		}
+		if pkgInfo == nil {
+			return nil, fmt.Errorf("package not found in API response")
+		}
+	}
+	
 	return &PackageInfo{
-		ImportPath:       importPath,
-		RepositoryID:     apiResponse.RepositoryID,
-		Repository:       apiResponse.Repository,
-		GeocodedLocation: apiResponse.GeocodedLocation,
+		ImportPath:     importPath,
+		RepositoryID:   pkgInfo.RepoID,
+		Owner:          pkgInfo.Owner,
+		Name:           pkgInfo.Name,
+		Package:        pkgInfo.Package,
+		FociPresent:    pkgInfo.Foci,
+		RepositoryFoci: pkgInfo.RepoFoci,
+		UserFoci:       pkgInfo.UserFoci,
 	}, nil
 }
 
