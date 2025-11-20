@@ -32,9 +32,13 @@ outputs:
   report-file:
     description: 'Path to the generated report file'
   total-imports:
-    description: 'Total number of import statements found'
+    description: 'Total number of third-party import statements found (excluding stdlib and GitHub)'
   unique-imports:
-    description: 'Number of unique imports found'
+    description: 'Number of unique third-party imports found (excluding stdlib and GitHub)'
+  github-packages:
+    description: 'Number of GitHub packages found'
+  stdlib-packages:
+    description: 'Number of standard library packages found'
 runs:
   using: 'composite'
   steps:
@@ -49,6 +53,7 @@ runs:
       env:
         HLTI_TOKEN: ${{ inputs.hlti-token }}
         HLTI_API_URL: ${{ inputs.hlti-api-url }}
+        FOCI_SUMMARY_FILE: "${{ github.workspace }}/foci-summary.txt"
       run: |
         # Run the scanner from the action directory
         cd "${{ github.action_path }}"
@@ -57,10 +62,14 @@ runs:
         # Extract summary stats from the report
         REPORT_PATH="${{ github.workspace }}/${{ inputs.output-file }}"
         if [ -f "$REPORT_PATH" ]; then
-          TOTAL=$(grep -E "^Total import statements found:" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
-          UNIQUE=$(grep -E "^Unique imports:" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
+          TOTAL=$(grep -E "^Total third-party imports" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
+          UNIQUE=$(grep -E "^Unique third-party imports" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
+          GITHUB=$(grep -E "^GitHub packages found:" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
+          STDLIB=$(grep -E "^Standard library packages found:" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
           echo "total-imports=$TOTAL" >> $GITHUB_OUTPUT
           echo "unique-imports=$UNIQUE" >> $GITHUB_OUTPUT
+          echo "github-packages=$GITHUB" >> $GITHUB_OUTPUT
+          echo "stdlib-packages=$STDLIB" >> $GITHUB_OUTPUT
           echo "report-file=${{ inputs.output-file }}" >> $GITHUB_OUTPUT
         fi
         
@@ -78,6 +87,7 @@ runs:
       shell: bash
       run: |
         REPORT_PATH="${{ github.workspace }}/${{ inputs.output-file }}"
+        FOCI_SUMMARY_PATH="${{ github.workspace }}/foci-summary.txt"
         if [ -f "$REPORT_PATH" ]; then
           echo "## Go Imports Scan Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -85,7 +95,16 @@ runs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Total Third-Party Imports:** ${{ steps.scan.outputs.total-imports }}" >> $GITHUB_STEP_SUMMARY
           echo "**Unique Third-Party Imports:** ${{ steps.scan.outputs.unique-imports }}" >> $GITHUB_STEP_SUMMARY
+          echo "**GitHub Packages:** ${{ steps.scan.outputs.github-packages }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Standard Library Packages:** ${{ steps.scan.outputs.stdlib-packages }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Add FOCI summary if available
+          if [ -f "$FOCI_SUMMARY_PATH" ]; then
+            cat "$FOCI_SUMMARY_PATH" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
           echo "Download the \`${{ inputs.artifact-name }}\` artifact to view the complete report with FOCI analysis." >> $GITHUB_STEP_SUMMARY
         else
           echo "## Go Imports Scan Complete" >> $GITHUB_STEP_SUMMARY

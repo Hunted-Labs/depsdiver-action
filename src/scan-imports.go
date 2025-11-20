@@ -26,6 +26,7 @@ func main() {
 	uniqueImports := make(map[string]bool)
 	githubImports := make(map[string]bool)
 	standardLibImports := make(map[string]bool)
+	githubPackageFiles := make(map[string][]string) // package -> []files that use it
 	
 	// Get HLTI API configuration from environment
 	hltiToken := os.Getenv("HLTI_TOKEN")
@@ -64,6 +65,9 @@ func main() {
 
 		imports := make(map[string]bool)
 
+		// Make path relative to root
+		relPath, _ := filepath.Rel(rootDir, path)
+
 		// Extract imports
 		for _, imp := range node.Imports {
 			importPath := strings.Trim(imp.Path.Value, "\"")
@@ -73,6 +77,8 @@ func main() {
 				standardLibImports[importPath] = true
 			} else if isGitHubPackage(importPath) {
 				githubImports[importPath] = true
+				// Track which files use this GitHub package
+				githubPackageFiles[importPath] = append(githubPackageFiles[importPath], relPath)
 			} else {
 				// Only track non-standard, non-GitHub imports
 				imports[importPath] = true
@@ -81,8 +87,6 @@ func main() {
 		}
 
 		if len(imports) > 0 {
-			// Make path relative to root
-			relPath, _ := filepath.Rel(rootDir, path)
 			allImports[relPath] = imports
 		}
 
@@ -151,6 +155,18 @@ func main() {
 	totalRepoFoci := 0
 	totalUserFoci := 0
 	packagesWithErrors := 0
+	
+	// Output FOCI summary to a file for GitHub Actions summary
+	fociSummaryFile := os.Getenv("FOCI_SUMMARY_FILE")
+	var fociSummary *os.File
+	if fociSummaryFile != "" {
+		var err error
+		fociSummary, err = os.Create(fociSummaryFile)
+		if err == nil {
+			defer fociSummary.Close()
+		}
+	}
+	
 	for _, result := range githubImportResults {
 		if result.Error != "" {
 			packagesWithErrors++
@@ -174,7 +190,7 @@ func main() {
 	fmt.Printf("Standard library packages found: %d\n", len(standardLibImports))
 	fmt.Println()
 	
-	// FOCI Summary
+	// FOCI Summary with detailed information
 	if len(githubImportResults) > 0 {
 		fmt.Println("### FOCI Analysis")
 		fmt.Println()
@@ -185,23 +201,35 @@ func main() {
 			fmt.Printf("Packages with API errors: %d\n", packagesWithErrors)
 		}
 		fmt.Println()
-	}
-
-	// GitHub packages section
-	if len(githubImports) > 0 {
-		fmt.Println("### GitHub Packages")
-		fmt.Println()
+		
+		// Detailed FOCI information by package
 		githubList := make([]string, 0, len(githubImports))
 		for imp := range githubImports {
 			githubList = append(githubList, imp)
 		}
 		sort.Strings(githubList)
+		
+		// Write FOCI summary for GitHub Actions
+		if fociSummary != nil {
+			fmt.Fprintf(fociSummary, "### FOCI Analysis\n\n")
+			fmt.Fprintf(fociSummary, "**Packages with FOCI present:** %d\n", fociPresentCount)
+			fmt.Fprintf(fociSummary, "**Total repository FOCI locations:** %d\n", totalRepoFoci)
+			fmt.Fprintf(fociSummary, "**Total user FOCI locations:** %d\n\n", totalUserFoci)
+			
+			if fociPresentCount > 0 {
+				fmt.Fprintf(fociSummary, "#### Packages with FOCI\n\n")
+			}
+		}
+		
 		for _, imp := range githubList {
-			fmt.Printf("#### `%s`\n", imp)
-			if result, exists := githubImportResults[imp]; exists {
-				if result.Error != "" {
-					fmt.Printf("\n⚠️ **API Error:** %s\n", result.Error)
-				} else {
+			if result, exists := githubImportResults[imp]; exists && result.Error == "" {
+				hasFociData := result.FociPresent || len(result.RepositoryFoci) > 0 || len(result.UserFoci) > 0
+				if hasFociData {
+					// Get files that use this package
+					files := githubPackageFiles[imp]
+					sort.Strings(files)
+					
+					fmt.Printf("#### `%s`\n", imp)
 					fmt.Println()
 					if result.Owner != "" && result.Name != "" {
 						fmt.Printf("**Repository:** `%s/%s`\n", result.Owner, result.Name)
@@ -258,9 +286,74 @@ func main() {
 							}
 						}
 					}
+					fmt.Println()
+					
+					// Write to FOCI summary file for GitHub Actions
+					if fociSummary != nil && result.FociPresent {
+						fmt.Fprintf(fociSummary, "**`%s`**\n", imp)
+						if result.Owner != "" && result.Name != "" {
+							fmt.Fprintf(fociSummary, "- Repository: `%s/%s`\n", result.Owner, result.Name)
+						}
+						if len(files) > 0 {
+							fmt.Fprintf(fociSummary, "- Used in files:\n")
+							for _, file := range files {
+								fmt.Fprintf(fociSummary, "  - `%s`\n", file)
+							}
+						}
+						if len(result.RepositoryFoci) > 0 {
+							fmt.Fprintf(fociSummary, "- Repository FOCI locations: %d\n", len(result.RepositoryFoci))
+							for _, loc := range result.RepositoryFoci {
+								if loc.CountryName != "" {
+									fmt.Fprintf(fociSummary, "  - %s", loc.CountryName)
+									if loc.ISO3166Alpha2 != "" {
+										fmt.Fprintf(fociSummary, " (%s)", loc.ISO3166Alpha2)
+									}
+									fmt.Fprintf(fociSummary, "\n")
+								}
+							}
+						}
+						if len(result.UserFoci) > 0 {
+							fmt.Fprintf(fociSummary, "- User FOCI locations: %d\n", len(result.UserFoci))
+							for _, loc := range result.UserFoci {
+								if loc.CountryName != "" {
+									fmt.Fprintf(fociSummary, "  - %s", loc.CountryName)
+									if loc.ISO3166Alpha2 != "" {
+										fmt.Fprintf(fociSummary, " (%s)", loc.ISO3166Alpha2)
+									}
+									fmt.Fprintf(fociSummary, "\n")
+								}
+							}
+						}
+						fmt.Fprintf(fociSummary, "\n")
+					}
+				}
+			}
+		}
+		
+		// List packages with errors
+		if packagesWithErrors > 0 {
+			fmt.Println("#### Packages with API Errors")
+			fmt.Println()
+			for _, imp := range githubList {
+				if result, exists := githubImportResults[imp]; exists && result.Error != "" {
+					fmt.Printf("- `%s`: ⚠️ %s\n", imp, result.Error)
 				}
 			}
 			fmt.Println()
+		}
+	}
+
+	// GitHub packages section (just list, no FOCI details)
+	if len(githubImports) > 0 {
+		fmt.Println("### GitHub Packages")
+		fmt.Println()
+		githubList := make([]string, 0, len(githubImports))
+		for imp := range githubImports {
+			githubList = append(githubList, imp)
+		}
+		sort.Strings(githubList)
+		for _, imp := range githubList {
+			fmt.Printf("- `%s`\n", imp)
 		}
 		fmt.Println()
 	}
@@ -424,4 +517,5 @@ func queryHLTIAPI(client *http.Client, apiURL, token, importPath string) (*Packa
 		UserFoci:       pkgInfo.UserFoci,
 	}, nil
 }
+
 
