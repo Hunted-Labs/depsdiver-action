@@ -47,8 +47,8 @@ runs:
       id: scan
       shell: bash
       env:
-        HLTI_TOKEN: ${{ inputs.hlti-token || secrets.HLTI_TOKEN }}
-        HLTI_API_URL: ${{ inputs.hlti-api-url || secrets.HLTI_API_URL }}
+        HLTI_TOKEN: ${{ inputs.hlti-token }}
+        HLTI_API_URL: ${{ inputs.hlti-api-url }}
       run: |
         # Run the scanner from the action directory
         cd "${{ github.action_path }}"
