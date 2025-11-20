@@ -19,8 +19,8 @@ jobs:
         uses: ./
         with:
           path: '.'
-          output-file: 'test-report.txt'
-          artifact-name: 'test-imports-report'
+          output-file: 'report.md'
+          artifact-name: 'report'
           hlti-api-url: ${{ secrets.HLTI_API_URL }}  # Required: HLTI API base URL
           hlti-token: ${{ secrets.HLTI_TOKEN }}
           
