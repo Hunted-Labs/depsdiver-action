@@ -1,9 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"go/parser"
 	"go/token"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -22,6 +26,16 @@ func main() {
 	uniqueImports := make(map[string]bool)
 	githubImports := make(map[string]bool)
 	standardLibImports := make(map[string]bool)
+	
+	// Get HLTI API configuration from environment
+	hltiToken := os.Getenv("HLTI_TOKEN")
+	hltiAPIURL := os.Getenv("HLTI_API_URL")
+	if hltiAPIURL == "" {
+		hltiAPIURL = "https://api.example.com" // default, should be overridden
+	}
+	
+	// Map to store API results for each GitHub import
+	githubImportResults := make(map[string]*PackageInfo)
 
 	err := filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -61,8 +75,8 @@ func main() {
 				githubImports[importPath] = true
 			} else {
 				// Only track non-standard, non-GitHub imports
-			imports[importPath] = true
-			uniqueImports[importPath] = true
+				imports[importPath] = true
+				uniqueImports[importPath] = true
 			}
 		}
 
@@ -78,6 +92,29 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error walking directory: %v\n", err)
 		os.Exit(1)
+	}
+
+	// Query HLTI API for each GitHub import if token is provided
+	if hltiToken != "" && len(githubImports) > 0 {
+		fmt.Fprintf(os.Stderr, "Querying HLTI API for %d GitHub packages...\n", len(githubImports))
+		client := &http.Client{
+			Timeout: 30 * time.Second,
+		}
+		
+		for importPath := range githubImports {
+			info, err := queryHLTIAPI(client, hltiAPIURL, hltiToken, importPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: Failed to query API for %s: %v\n", importPath, err)
+				githubImportResults[importPath] = &PackageInfo{
+					ImportPath: importPath,
+					Error:      err.Error(),
+				}
+			} else {
+				githubImportResults[importPath] = info
+			}
+			// Small delay to avoid rate limiting
+			time.Sleep(100 * time.Millisecond)
+		}
 	}
 
 	// Generate report
@@ -131,6 +168,26 @@ func main() {
 		sort.Strings(githubList)
 		for _, imp := range githubList {
 			fmt.Printf("- `%s`\n", imp)
+			if result, exists := githubImportResults[imp]; exists {
+				if result.Error != "" {
+					fmt.Printf("  - ⚠️  API Error: %s\n", result.Error)
+				} else {
+					if result.RepositoryID != 0 {
+						fmt.Printf("  - Repository ID: %d\n", result.RepositoryID)
+					}
+					if result.Repository != "" {
+						fmt.Printf("  - Repository: %s\n", result.Repository)
+					}
+					if len(result.GeocodedLocation) > 0 {
+						fmt.Printf("  - Geocoded Locations: %d found\n", len(result.GeocodedLocation))
+						for _, loc := range result.GeocodedLocation {
+							if loc.CountryName != "" {
+								fmt.Printf("    - %s (%s)\n", loc.CountryName, loc.ISO3166Alpha2)
+							}
+						}
+					}
+				}
+			}
 		}
 		fmt.Println()
 	}
@@ -174,5 +231,80 @@ func isStandardLibrary(importPath string) bool {
 // isGitHubPackage checks if an import path is from GitHub.
 func isGitHubPackage(importPath string) bool {
 	return strings.HasPrefix(importPath, "github.com/")
+}
+
+// PackageInfo represents the information returned from the HLTI API
+type PackageInfo struct {
+	ImportPath       string
+	RepositoryID     int64
+	Repository       string
+	GeocodedLocation []GeocodedPkgLocation
+	Error            string
+}
+
+// GeocodedPkgLocation represents geocoded location data
+type GeocodedPkgLocation struct {
+	Formatted              string `json:"formatted"`
+	CountryName            string `json:"country_name"`
+	ISO3166Alpha2          string `json:"iso_3166_alpha_2"`
+	ISO3166Alpha3          string `json:"iso_3166_alpha_3"`
+	Timestamp              string `json:"timestamp"`
+	Reason                 string `json:"reason"`
+	Latitude               string `json:"latitude"`
+	Longitude              string `json:"longitude"`
+	OpenStreetMapURL       string `json:"openstreetmaps_url"`
+	Timezone               string `json:"timezone"`
+	TimezoneOffset         string `json:"timezone_offset"`
+	OrganizationName       string `json:"organization_name"`
+	OrganizationDomain     string `json:"organization_domain"`
+	OrganizationGitHubRepo string `json:"organization_github_repo"`
+}
+
+// queryHLTIAPI queries the HLTI API for package information
+func queryHLTIAPI(client *http.Client, apiURL, token, importPath string) (*PackageInfo, error) {
+	// For GitHub packages, use "go" as ecosystem and the full import path as package name
+	// URL encode the package name
+	encodedPackage := url.QueryEscape(importPath)
+	apiEndpoint := fmt.Sprintf("%s/package/go/%s?token=%s", strings.TrimSuffix(apiURL, "/"), encodedPackage, url.QueryEscape(token))
+	
+	req, err := http.NewRequest("GET", apiEndpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	
+	req.Header.Set("Accept", "application/json")
+	
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+	
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+	
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+	}
+	
+	// Parse the JSON response - matches GitHubPackageHistory structure
+	var apiResponse struct {
+		RepositoryID     int64                `json:"repository_id"`
+		Repository       string               `json:"repository"`
+		GeocodedLocation []GeocodedPkgLocation `json:"geocoded_location"`
+	}
+	
+	if err := json.Unmarshal(body, &apiResponse); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	
+	return &PackageInfo{
+		ImportPath:       importPath,
+		RepositoryID:     apiResponse.RepositoryID,
+		Repository:       apiResponse.Repository,
+		GeocodedLocation: apiResponse.GeocodedLocation,
+	}, nil
 }
 

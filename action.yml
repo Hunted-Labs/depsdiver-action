@@ -20,6 +20,14 @@ inputs:
     description: 'Number of days to retain the artifact'
     required: false
     default: '30'
+  hlti-api-url:
+    description: 'HLTI API base URL'
+    required: false
+    default: 'https://api.example.com'
+  hlti-token:
+    description: 'HLTI API token (should be set as secret)'
+    required: false
+    default: ''
 outputs:
   report-file:
     description: 'Path to the generated report file'
@@ -38,6 +46,9 @@ runs:
     - name: Run Go imports scanner
       id: scan
       shell: bash
+      env:
+        HLTI_TOKEN: ${{ inputs.hlti-token || secrets.HLTI_TOKEN }}
+        HLTI_API_URL: ${{ inputs.hlti-api-url || secrets.HLTI_API_URL }}
       run: |
         # Run the scanner from the action directory
         cd "${{ github.action_path }}"
