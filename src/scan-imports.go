@@ -20,6 +20,8 @@ func main() {
 	rootDir := os.Args[1]
 	allImports := make(map[string]map[string]bool) // file -> imports
 	uniqueImports := make(map[string]bool)
+	githubImports := make(map[string]bool)
+	standardLibImports := make(map[string]bool)
 
 	err := filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -51,8 +53,17 @@ func main() {
 		// Extract imports
 		for _, imp := range node.Imports {
 			importPath := strings.Trim(imp.Path.Value, "\"")
-			imports[importPath] = true
-			uniqueImports[importPath] = true
+			
+			// Categorize imports
+			if isStandardLibrary(importPath) {
+				standardLibImports[importPath] = true
+			} else if isGitHubPackage(importPath) {
+				githubImports[importPath] = true
+			} else {
+				// Only track non-standard, non-GitHub imports
+				imports[importPath] = true
+				uniqueImports[importPath] = true
+			}
 		}
 
 		if len(imports) > 0 {
@@ -71,6 +82,7 @@ func main() {
 
 	// Generate report
 	fmt.Println("# Go Imports Report")
+	fmt.Println("(Standard library and GitHub packages filtered out)")
 	fmt.Printf("Generated: %s\n\n", getCurrentTime())
 
 	// Sort file paths
@@ -102,23 +114,65 @@ func main() {
 	fmt.Println()
 	fmt.Println("## Summary")
 	fmt.Println()
-	fmt.Printf("Total import statements found: %d\n", totalImports)
-	fmt.Printf("Unique imports: %d\n", len(uniqueImports))
+	fmt.Printf("Total third-party imports (excluding stdlib and GitHub): %d\n", totalImports)
+	fmt.Printf("Unique third-party imports: %d\n", len(uniqueImports))
+	fmt.Printf("GitHub packages found: %d\n", len(githubImports))
+	fmt.Printf("Standard library packages found: %d\n", len(standardLibImports))
 	fmt.Println()
-	fmt.Println("### All Unique Imports")
-	fmt.Println()
-
-	uniqueList := make([]string, 0, len(uniqueImports))
-	for imp := range uniqueImports {
-		uniqueList = append(uniqueList, imp)
+	
+	// GitHub packages section
+	if len(githubImports) > 0 {
+		fmt.Println("### GitHub Packages")
+		fmt.Println()
+		githubList := make([]string, 0, len(githubImports))
+		for imp := range githubImports {
+			githubList = append(githubList, imp)
+		}
+		sort.Strings(githubList)
+		for _, imp := range githubList {
+			fmt.Printf("- `%s`\n", imp)
+		}
+		fmt.Println()
 	}
-	sort.Strings(uniqueList)
-	for _, imp := range uniqueList {
-		fmt.Printf("- `%s`\n", imp)
+	
+	// Third-party imports (non-stdlib, non-GitHub)
+	if len(uniqueImports) > 0 {
+		fmt.Println("### All Unique Third-Party Imports (excluding stdlib and GitHub)")
+		fmt.Println()
+		uniqueList := make([]string, 0, len(uniqueImports))
+		for imp := range uniqueImports {
+			uniqueList = append(uniqueList, imp)
+		}
+		sort.Strings(uniqueList)
+		for _, imp := range uniqueList {
+			fmt.Printf("- `%s`\n", imp)
+		}
 	}
 }
 
 func getCurrentTime() string {
 	return time.Now().UTC().Format("2006-01-02 15:04:05 UTC")
+}
+
+// isStandardLibrary checks if an import path is from the Go standard library.
+// Standard library packages don't have a dot in the first path segment.
+func isStandardLibrary(importPath string) bool {
+	// Handle blank imports (like _ "github.com/lib/pq")
+	if importPath == "" {
+		return false
+	}
+	
+	// Get the first segment of the path
+	firstSegment := strings.Split(importPath, "/")[0]
+	
+	// Standard library packages don't contain dots in the first segment
+	// Examples: "fmt", "os", "net/http", "encoding/json"
+	// Non-stdlib examples: "github.com/...", "golang.org/...", "google.golang.org/..."
+	return !strings.Contains(firstSegment, ".")
+}
+
+// isGitHubPackage checks if an import path is from GitHub.
+func isGitHubPackage(importPath string) bool {
+	return strings.HasPrefix(importPath, "github.com/")
 }
 
