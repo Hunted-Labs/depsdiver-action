@@ -21,9 +21,9 @@ inputs:
     required: false
     default: '30'
   hlti-api-url:
-    description: 'HLTI API base URL'
+    description: 'HLTI API base URL (e.g., https://snarf.huntedlabs.dev/api)'
     required: false
-    default: 'https://api.example.com'
+    default: ''
   hlti-token:
     description: 'HLTI API token (should be set as secret)'
     required: false
@@ -83,16 +83,10 @@ runs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "The complete import report has been generated and uploaded as an artifact." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Total Imports:** ${{ steps.scan.outputs.total-imports }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Unique Imports:** ${{ steps.scan.outputs.unique-imports }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Total Third-Party Imports:** ${{ steps.scan.outputs.total-imports }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Unique Third-Party Imports:** ${{ steps.scan.outputs.unique-imports }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Quick Preview" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          head -50 "$REPORT_PATH" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Download the \`${{ inputs.artifact-name }}\` artifact to view the complete report." >> $GITHUB_STEP_SUMMARY
+          echo "Download the \`${{ inputs.artifact-name }}\` artifact to view the complete report with FOCI analysis." >> $GITHUB_STEP_SUMMARY
         else
           echo "## Go Imports Scan Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

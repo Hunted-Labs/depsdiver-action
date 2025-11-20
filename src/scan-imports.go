@@ -146,6 +146,23 @@ func main() {
 		fmt.Println()
 	}
 
+	// Calculate FOCI statistics
+	fociPresentCount := 0
+	totalRepoFoci := 0
+	totalUserFoci := 0
+	packagesWithErrors := 0
+	for _, result := range githubImportResults {
+		if result.Error != "" {
+			packagesWithErrors++
+		} else {
+			if result.FociPresent {
+				fociPresentCount++
+			}
+			totalRepoFoci += len(result.RepositoryFoci)
+			totalUserFoci += len(result.UserFoci)
+		}
+	}
+
 	// Summary
 	fmt.Println("---")
 	fmt.Println()
@@ -156,6 +173,19 @@ func main() {
 	fmt.Printf("GitHub packages found: %d\n", len(githubImports))
 	fmt.Printf("Standard library packages found: %d\n", len(standardLibImports))
 	fmt.Println()
+	
+	// FOCI Summary
+	if len(githubImportResults) > 0 {
+		fmt.Println("### FOCI Analysis")
+		fmt.Println()
+		fmt.Printf("Packages with FOCI present: %d\n", fociPresentCount)
+		fmt.Printf("Total repository FOCI locations: %d\n", totalRepoFoci)
+		fmt.Printf("Total user FOCI locations: %d\n", totalUserFoci)
+		if packagesWithErrors > 0 {
+			fmt.Printf("Packages with API errors: %d\n", packagesWithErrors)
+		}
+		fmt.Println()
+	}
 
 	// GitHub packages section
 	if len(githubImports) > 0 {
@@ -167,38 +197,70 @@ func main() {
 		}
 		sort.Strings(githubList)
 		for _, imp := range githubList {
-			fmt.Printf("- `%s`\n", imp)
+			fmt.Printf("#### `%s`\n", imp)
 			if result, exists := githubImportResults[imp]; exists {
 				if result.Error != "" {
-					fmt.Printf("  - ⚠️  API Error: %s\n", result.Error)
+					fmt.Printf("\n⚠️ **API Error:** %s\n", result.Error)
 				} else {
-					if result.RepositoryID != 0 {
-						fmt.Printf("  - Repository ID: %d\n", result.RepositoryID)
-					}
+					fmt.Println()
 					if result.Owner != "" && result.Name != "" {
-						fmt.Printf("  - Repository: %s/%s\n", result.Owner, result.Name)
+						fmt.Printf("**Repository:** `%s/%s`\n", result.Owner, result.Name)
 					}
+					if result.RepositoryID != 0 {
+						fmt.Printf("**Repository ID:** %d\n", result.RepositoryID)
+					}
+					
+					// FOCI Status
 					if result.FociPresent {
-						fmt.Printf("  - FOCI Present: Yes\n")
+						fmt.Printf("**FOCI Status:** ✅ Present\n")
+					} else {
+						fmt.Printf("**FOCI Status:** ❌ Not Present\n")
 					}
+					
+					// Repository FOCI
 					if len(result.RepositoryFoci) > 0 {
-						fmt.Printf("  - Repository FOCI Locations: %d found\n", len(result.RepositoryFoci))
+						fmt.Printf("\n**Repository FOCI Locations** (%d):\n", len(result.RepositoryFoci))
 						for _, loc := range result.RepositoryFoci {
 							if loc.CountryName != "" {
-								fmt.Printf("    - %s (%s)\n", loc.CountryName, loc.ISO3166Alpha2)
+								details := []string{}
+								if loc.ISO3166Alpha2 != "" {
+									details = append(details, loc.ISO3166Alpha2)
+								}
+								if loc.OrganizationName != "" {
+									details = append(details, fmt.Sprintf("Org: %s", loc.OrganizationName))
+								}
+								detailStr := ""
+								if len(details) > 0 {
+									detailStr = " (" + strings.Join(details, ", ") + ")"
+								}
+								fmt.Printf("- %s%s\n", loc.CountryName, detailStr)
 							}
 						}
 					}
+					
+					// User FOCI
 					if len(result.UserFoci) > 0 {
-						fmt.Printf("  - User FOCI Locations: %d found\n", len(result.UserFoci))
+						fmt.Printf("\n**User FOCI Locations** (%d):\n", len(result.UserFoci))
 						for _, loc := range result.UserFoci {
 							if loc.CountryName != "" {
-								fmt.Printf("    - %s (%s)\n", loc.CountryName, loc.ISO3166Alpha2)
+								details := []string{}
+								if loc.ISO3166Alpha2 != "" {
+									details = append(details, loc.ISO3166Alpha2)
+								}
+								if loc.OrganizationName != "" {
+									details = append(details, fmt.Sprintf("Org: %s", loc.OrganizationName))
+								}
+								detailStr := ""
+								if len(details) > 0 {
+									detailStr = " (" + strings.Join(details, ", ") + ")"
+								}
+								fmt.Printf("- %s%s\n", loc.CountryName, detailStr)
 							}
 						}
 					}
 				}
 			}
+			fmt.Println()
 		}
 		fmt.Println()
 	}
