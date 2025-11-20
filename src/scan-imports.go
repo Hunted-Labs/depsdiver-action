@@ -61,8 +61,8 @@ func main() {
 				githubImports[importPath] = true
 			} else {
 				// Only track non-standard, non-GitHub imports
-				imports[importPath] = true
-				uniqueImports[importPath] = true
+			imports[importPath] = true
+			uniqueImports[importPath] = true
 			}
 		}
 
@@ -119,7 +119,7 @@ func main() {
 	fmt.Printf("GitHub packages found: %d\n", len(githubImports))
 	fmt.Printf("Standard library packages found: %d\n", len(standardLibImports))
 	fmt.Println()
-	
+
 	// GitHub packages section
 	if len(githubImports) > 0 {
 		fmt.Println("### GitHub Packages")
@@ -139,13 +139,13 @@ func main() {
 	if len(uniqueImports) > 0 {
 		fmt.Println("### All Unique Third-Party Imports (excluding stdlib and GitHub)")
 		fmt.Println()
-		uniqueList := make([]string, 0, len(uniqueImports))
-		for imp := range uniqueImports {
-			uniqueList = append(uniqueList, imp)
-		}
-		sort.Strings(uniqueList)
-		for _, imp := range uniqueList {
-			fmt.Printf("- `%s`\n", imp)
+	uniqueList := make([]string, 0, len(uniqueImports))
+	for imp := range uniqueImports {
+		uniqueList = append(uniqueList, imp)
+	}
+	sort.Strings(uniqueList)
+	for _, imp := range uniqueList {
+		fmt.Printf("- `%s`\n", imp)
 		}
 	}
 }

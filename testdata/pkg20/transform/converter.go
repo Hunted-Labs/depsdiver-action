@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+
+	"github.com/mailru/easyjson"
 )
 
 func ToString(value interface{}) string {
@@ -31,5 +33,9 @@ func ToJSON(value interface{}) (string, error) {
 
 func FromJSON(data string, dest interface{}) error {
 	return json.Unmarshal([]byte(data), dest)
+}
+
+func FromEasyJSON(data []byte, dest easyjson.Unmarshaler) error {
+	return easyjson.Unmarshal(data, dest)
 }
 

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"sync"
+
+	"github.com/example/pipeline-runner-dev/pkg/runner"
 )
 
 type Broker struct {
@@ -45,5 +47,9 @@ func (b *Broker) Subscribe(topic string) (<-chan Message, error) {
 	}
 
 	return queue.Subscribe(), nil
+}
+
+func (b *Broker) ProcessWithPipeline(ctx context.Context, pipeline *runner.Pipeline) error {
+	return pipeline.Execute(ctx)
 }
 

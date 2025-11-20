@@ -4,6 +4,8 @@ import (
 	"encoding/yaml"
 	"flag"
 	"os"
+
+	"github.com/example/easygo/pkg/config"
 )
 
 type Config struct {
@@ -54,5 +56,13 @@ func LoadFromFlags() *Config {
 			DSN: *dsn,
 		},
 	}
+}
+
+func LoadWithEasyGo(path string) (*Config, error) {
+	var cfg Config
+	if err := config.Load(path, &cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
 }
 

@@ -3,6 +3,8 @@ package utils
 import (
 	"strings"
 	"unicode"
+
+	"github.com/example/easygo/pkg/helpers"
 )
 
 func ToTitle(s string) string {
@@ -28,5 +30,9 @@ func Reverse(s string) string {
 		runes[i], runes[j] = runes[j], runes[i]
 	}
 	return string(runes)
+}
+
+func ProcessWithEasyGo(s string) string {
+	return helpers.ProcessString(s)
 }
 

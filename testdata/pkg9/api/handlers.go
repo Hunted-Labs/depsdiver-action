@@ -3,6 +3,8 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/mailru/easyjson"
 )
 
 type Handler struct{}
@@ -29,5 +31,14 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	json.NewEncoder(w).Encode(user)
+}
+
+func (h *Handler) CreateUserEasyJSON(w http.ResponseWriter, r *http.Request, user easyjson.Marshaler) error {
+	data, err := easyjson.Marshal(user)
+	if err != nil {
+		return err
+	}
+	w.Write(data)
+	return nil
 }
 

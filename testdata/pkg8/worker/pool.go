@@ -3,6 +3,8 @@ package worker
 import (
 	"context"
 	"sync"
+
+	"github.com/example/pipeline-runner-dev/pkg/runner"
 )
 
 type Job func(ctx context.Context) error
@@ -44,6 +46,10 @@ func (p *Pool) worker(ctx context.Context) {
 
 func (p *Pool) Submit(job Job) {
 	p.jobs <- job
+}
+
+func (p *Pool) RunPipeline(ctx context.Context, pipeline *runner.Pipeline) error {
+	return pipeline.Execute(ctx)
 }
 
 func (p *Pool) Stop() {
