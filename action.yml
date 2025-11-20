@@ -1,0 +1,91 @@
+name: 'Scan Go Imports'
+description: 'Scan all Go files in a project and extract all imports'
+branding:
+  icon: 'search'
+  color: 'blue'
+inputs:
+  path:
+    description: 'Directory path to scan (default: repository root)'
+    required: false
+    default: '.'
+  output-file:
+    description: 'Output file name for the import report'
+    required: false
+    default: 'go-imports-report.txt'
+  artifact-name:
+    description: 'Name of the artifact to upload'
+    required: false
+    default: 'go-imports-report'
+  artifact-retention-days:
+    description: 'Number of days to retain the artifact'
+    required: false
+    default: '30'
+outputs:
+  report-file:
+    description: 'Path to the generated report file'
+  total-imports:
+    description: 'Total number of import statements found'
+  unique-imports:
+    description: 'Number of unique imports found'
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+      shell: bash
+      
+    - name: Run Go imports scanner
+      id: scan
+      shell: bash
+      run: |
+        # Run the scanner from the action directory
+        cd "${{ github.action_path }}"
+        go run src/scan-imports.go "${{ github.workspace }}/${{ inputs.path }}" > "${{ github.workspace }}/${{ inputs.output-file }}" 2>&1 || true
+        
+        # Extract summary stats from the report
+        REPORT_PATH="${{ github.workspace }}/${{ inputs.output-file }}"
+        if [ -f "$REPORT_PATH" ]; then
+          TOTAL=$(grep -E "^Total import statements found:" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
+          UNIQUE=$(grep -E "^Unique imports:" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
+          echo "total-imports=$TOTAL" >> $GITHUB_OUTPUT
+          echo "unique-imports=$UNIQUE" >> $GITHUB_OUTPUT
+          echo "report-file=${{ inputs.output-file }}" >> $GITHUB_OUTPUT
+        fi
+        
+        cat "$REPORT_PATH"
+        
+    - name: Upload import report
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ github.workspace }}/${{ inputs.output-file }}
+        retention-days: ${{ inputs.artifact-retention-days }}
+        if-no-files-found: warn
+        
+    - name: Output summary
+      shell: bash
+      run: |
+        REPORT_PATH="${{ github.workspace }}/${{ inputs.output-file }}"
+        if [ -f "$REPORT_PATH" ]; then
+          echo "## Go Imports Scan Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The complete import report has been generated and uploaded as an artifact." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Total Imports:** ${{ steps.scan.outputs.total-imports }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Unique Imports:** ${{ steps.scan.outputs.unique-imports }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Quick Preview" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          head -50 "$REPORT_PATH" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Download the \`${{ inputs.artifact-name }}\` artifact to view the complete report." >> $GITHUB_STEP_SUMMARY
+        else
+          echo "## Go Imports Scan Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "No Go files found in the project." >> $GITHUB_STEP_SUMMARY
+        fi
+
