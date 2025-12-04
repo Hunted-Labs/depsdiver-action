@@ -12,7 +12,7 @@ A GitHub Action that scans all Go files in your project and extracts all import 
 - ✨ Displays a summary in the GitHub Actions UI 
 - 🔒 Integrates with HLTI API to fetch threat intelligence data for GitHub packages 
  
-## Usage
+## Usage 
 
 ### Basic Usage
 
