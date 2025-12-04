@@ -6,7 +6,7 @@ A GitHub Action that scans all Go files in your project and extracts all import 
 
 - 🔍 Recursively scans all `.go` files in your project   
 - 📊 Generates a detailed markdown report with imports organized by file
-- 📈 Provides summary statistics (total imports, unique imports)
+- 📈 Provides summary statistics (total imports, unique imports) 
 - 🎯 Automatically skips `vendor/`, `.git/`, and `node_modules/` directories
 - 📦 Uploads the report as a downloadable artifact
 - ✨ Displays a summary in the GitHub Actions UI
