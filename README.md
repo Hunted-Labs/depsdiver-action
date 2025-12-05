@@ -2,6 +2,7 @@
 
 A GitHub Action that scans all Go files in your project and extracts all import statements, generating a comprehensive report.
 
+
 ## Features
 
 - 🔍 Recursively scans all `.go` files in your project   
