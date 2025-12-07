@@ -286,7 +286,7 @@ func main() {
 			fmt.Printf("Packages with OpenSSF Scorecard: %d\n", packagesWithScorecard)
 			fmt.Printf("Average OpenSSF Score: %.1f/10\n", avgScore)
 			if lowScorePackages > 0 {
-				fmt.Printf("⚠️ Packages with low security score (<5): %d\n", lowScorePackages)
+				fmt.Printf("WARNING: Packages with low security score (<5): %d\n", lowScorePackages)
 			}
 		}
 		
@@ -305,43 +305,45 @@ func main() {
 		// Write FOCI summary for GitHub Actions
 		if fociSummary != nil {
 			// Summary statistics in table format
+			fmt.Fprintf(fociSummary, "## Supply Chain Security Analysis\n\n")
 			fmt.Fprintf(fociSummary, "<table>\n")
-			fmt.Fprintf(fociSummary, "<tr><th>Metric</th><th>Count</th></tr>\n")
+			fmt.Fprintf(fociSummary, "<tr><th>Security Metric</th><th>Value</th></tr>\n")
 
-			// Color code based on findings
-			fociIcon := "✅"
+			// FOCI findings
+			fociStatus := "PASS"
 			if fociPresentCount > 0 {
-				fociIcon = "⚠️"
+				fociStatus = "ALERT"
 			}
 
-			fmt.Fprintf(fociSummary, "<tr><td>%s Packages with FOCI</td><td><strong>%d</strong></td></tr>\n", fociIcon, fociPresentCount)
-			fmt.Fprintf(fociSummary, "<tr><td>📍 Repository FOCI Locations</td><td><strong>%d</strong></td></tr>\n", totalRepoFoci)
-			fmt.Fprintf(fociSummary, "<tr><td>👤 Contributors with FOCI</td><td><strong>%d</strong></td></tr>\n", totalContributors)
+			fmt.Fprintf(fociSummary, "<tr><td><strong>FOCI Assessment Status</strong></td><td><strong>%s</strong></td></tr>\n", fociStatus)
+			fmt.Fprintf(fociSummary, "<tr><td>Packages with FOCI Detected</td><td><strong>%d</strong></td></tr>\n", fociPresentCount)
+			fmt.Fprintf(fociSummary, "<tr><td>Repository FOCI Locations</td><td><strong>%d</strong></td></tr>\n", totalRepoFoci)
+			fmt.Fprintf(fociSummary, "<tr><td>Contributors with FOCI</td><td><strong>%d</strong></td></tr>\n", totalContributors)
 
 			// OpenSSF Scorecard summary
 			if packagesWithScorecard > 0 {
 				avgScore := totalOpenSSFScore / float64(packagesWithScorecard)
-				scoreIcon := "✅"
+				scoreStatus := "GOOD"
 				if avgScore < 5.0 {
-					scoreIcon = "⚠️"
+					scoreStatus = "POOR"
 				} else if avgScore < 7.0 {
-					scoreIcon = "🟡"
+					scoreStatus = "FAIR"
 				}
-				fmt.Fprintf(fociSummary, "<tr><td>🛡️ Packages with OpenSSF Scorecard</td><td><strong>%d</strong></td></tr>\n", packagesWithScorecard)
-				fmt.Fprintf(fociSummary, "<tr><td>%s Average OpenSSF Score</td><td><strong>%.1f/10</strong></td></tr>\n", scoreIcon, avgScore)
+				fmt.Fprintf(fociSummary, "<tr><td>Packages with Security Scorecard</td><td><strong>%d</strong></td></tr>\n", packagesWithScorecard)
+				fmt.Fprintf(fociSummary, "<tr><td>Average Security Score</td><td><strong>%.1f/10 (%s)</strong></td></tr>\n", avgScore, scoreStatus)
 				if lowScorePackages > 0 {
-					fmt.Fprintf(fociSummary, "<tr><td>⚠️ Low Security Score Packages (&lt;5)</td><td><strong>%d</strong></td></tr>\n", lowScorePackages)
+					fmt.Fprintf(fociSummary, "<tr><td>Packages with Low Security Score</td><td><strong>%d</strong></td></tr>\n", lowScorePackages)
 				}
 			}
 
 			if packagesWithErrors > 0 {
-				fmt.Fprintf(fociSummary, "<tr><td>❌ Packages with Errors</td><td><strong>%d</strong></td></tr>\n", packagesWithErrors)
+				fmt.Fprintf(fociSummary, "<tr><td>API Query Errors</td><td><strong>%d</strong></td></tr>\n", packagesWithErrors)
 			}
 
 			fmt.Fprintf(fociSummary, "</table>\n\n")
 
 			if fociPresentCount > 0 {
-				fmt.Fprintf(fociSummary, "#### 🚨 Packages with FOCI Details\n\n")
+				fmt.Fprintf(fociSummary, "### Detailed FOCI Analysis\n\n")
 			}
 		}
 		
@@ -364,9 +366,9 @@ func main() {
 					
 					// FOCI Status
 					if result.FociPresent {
-						fmt.Printf("**FOCI Status:** ✅ Present\n")
+						fmt.Printf("**FOCI Status:** DETECTED\n")
 					} else {
-						fmt.Printf("**FOCI Status:** ❌ Not Present\n")
+						fmt.Printf("**FOCI Status:** NOT DETECTED\n")
 					}
 					
 					// Repository FOCI
@@ -399,7 +401,7 @@ func main() {
 							userFociMap[userID] = append(userFociMap[userID], loc)
 						}
 						
-						fmt.Printf("\n**Contributor FOCI** (%d contributors):\n", len(userFociMap))
+						fmt.Printf("\n**Contributor FOCI Analysis** (%d contributors):\n", len(userFociMap))
 						for userID, fociEntries := range userFociMap {
 							// Get unique countries for this user
 							countries := make(map[string]bool)
@@ -437,7 +439,7 @@ func main() {
 								
 								// Show countries
 								if len(countryList) > 0 {
-									fmt.Printf("    - 🌍 **Countries:** %s\n", strings.Join(countryList, ", "))
+									fmt.Printf("    - **Countries:** %s\n", strings.Join(countryList, ", "))
 								}
 								
 								// Show emails (first few)
@@ -446,7 +448,7 @@ func main() {
 									if len(emailsToShow) > 3 {
 										emailsToShow = emailsToShow[:3]
 									}
-									fmt.Printf("    - 📧 **Emails:** %s", strings.Join(emailsToShow, ", "))
+									fmt.Printf("    - **Emails:** %s", strings.Join(emailsToShow, ", "))
 									if len(profile.Emails) > 3 {
 										fmt.Printf(" (+%d more)", len(profile.Emails)-3)
 									}
@@ -455,7 +457,7 @@ func main() {
 								
 								// Show locations
 								if len(profile.Locations) > 0 {
-									fmt.Printf("    - 📍 **Locations:** %s\n", strings.Join(profile.Locations, ", "))
+									fmt.Printf("    - **Locations:** %s\n", strings.Join(profile.Locations, ", "))
 								}
 								
 								// Show geocoded locations with reasons
@@ -468,7 +470,7 @@ func main() {
 										if gl.Reason != "" {
 											info += fmt.Sprintf(" _(Reason: %s)_", gl.Reason)
 										}
-										fmt.Printf("    - 🗺️ **Geocoded:** %s\n", info)
+										fmt.Printf("    - **Geocoded Location:** %s\n", info)
 									}
 								}
 								
@@ -481,13 +483,13 @@ func main() {
 										}
 									}
 									if len(companyNames) > 0 {
-										fmt.Printf("    - 🏢 **Companies:** %s\n", strings.Join(companyNames, ", "))
+										fmt.Printf("    - **Companies:** %s\n", strings.Join(companyNames, ", "))
 									}
 								}
 								
 								// GitHub profile link
 								if username != "" {
-									fmt.Printf("    - 🔗 [GitHub Profile](https://github.com/%s)\n", username)
+									fmt.Printf("    - **GitHub Profile:** https://github.com/%s\n", username)
 								}
 							} else {
 								// No profile available, show basic info
@@ -495,12 +497,12 @@ func main() {
 									fmt.Printf("\n  - **User ID %d**\n", userID)
 								}
 								if len(countryList) > 0 {
-									fmt.Printf("    - 🌍 **Countries:** %s\n", strings.Join(countryList, ", "))
+									fmt.Printf("    - **Countries:** %s\n", strings.Join(countryList, ", "))
 								}
 								// Show reasons from FOCI entries
 								for _, f := range fociEntries {
 									if f.Reason != "" {
-										fmt.Printf("    - 📝 **Reason:** %s\n", f.Reason)
+										fmt.Printf("    - **Reason:** %s\n", f.Reason)
 										break // Just show first reason
 									}
 								}
@@ -510,13 +512,13 @@ func main() {
 					// OpenSSF Scorecard
 					if result.OpenSSFScorecard != nil {
 						sc := result.OpenSSFScorecard
-						fmt.Printf("\n**🛡️ OpenSSF Scorecard**\n")
+						fmt.Printf("\n**OpenSSF Security Scorecard**\n")
 						fmt.Printf("- **Overall Score:** %.1f/10\n", sc.OverallScore)
 						if sc.Date != "" {
-							fmt.Printf("- **Date:** %s\n", sc.Date)
+							fmt.Printf("- **Assessment Date:** %s\n", sc.Date)
 						}
 						if sc.ScorecardVersion != "" {
-							fmt.Printf("- **Version:** %s\n", sc.ScorecardVersion)
+							fmt.Printf("- **Scorecard Version:** %s\n", sc.ScorecardVersion)
 						}
 						
 						// Show individual checks with concerning scores (< 5)
@@ -528,13 +530,13 @@ func main() {
 						}
 						
 						if len(concerningChecks) > 0 {
-							fmt.Printf("\n**⚠️ Security Concerns** (%d checks with low scores):\n", len(concerningChecks))
+							fmt.Printf("\n**Security Concerns Identified** (%d checks with low scores):\n", len(concerningChecks))
 							for _, check := range concerningChecks {
 								scoreStr := fmt.Sprintf("%d/10", check.Score)
 								if check.Score == -1 {
 									scoreStr = "N/A"
 								}
-								fmt.Printf("  - **%s** (%s): %s\n", check.Name, scoreStr, check.Reason)
+								fmt.Printf("  - **%s** (Score: %s): %s\n", check.Name, scoreStr, check.Reason)
 							}
 						}
 					}
@@ -545,7 +547,7 @@ func main() {
 					if fociSummary != nil && result.FociPresent {
 						// Create expandable section for each package
 						fmt.Fprintf(fociSummary, "<details>\n")
-						fmt.Fprintf(fociSummary, "<summary><strong>📦 <code>%s</code></strong>", imp)
+						fmt.Fprintf(fociSummary, "<summary><strong>Package: <code>%s</code></strong>", imp)
 
 						if result.Owner != "" && result.Name != "" {
 							fmt.Fprintf(fociSummary, " - <code>%s/%s</code>", result.Owner, result.Name)
@@ -557,31 +559,41 @@ func main() {
 
 						// Files using this package
 						if len(files) > 0 {
-							fmt.Fprintf(fociSummary, "<tr><td><strong>📄 Used in Files</strong></td><td>%d file(s)</td></tr>\n", len(files))
+							fmt.Fprintf(fociSummary, "<tr><td><strong>Files Using Package</strong></td><td>%d file(s)</td></tr>\n", len(files))
 							fmt.Fprintf(fociSummary, "<tr><td colspan=\"2\">\n")
+							fmt.Fprintf(fociSummary, "<details>\n")
+							fmt.Fprintf(fociSummary, "<summary>View File List</summary>\n")
+							fmt.Fprintf(fociSummary, "<ul>\n")
 							for _, file := range files {
-								fmt.Fprintf(fociSummary, "• <code>%s</code><br>\n", file)
+								fmt.Fprintf(fociSummary, "<li><code>%s</code></li>\n", file)
 							}
+							fmt.Fprintf(fociSummary, "</ul>\n")
+							fmt.Fprintf(fociSummary, "</details>\n")
 							fmt.Fprintf(fociSummary, "</td></tr>\n")
 						}
 
 						// Repository FOCI locations
 						if len(result.RepositoryFoci) > 0 {
-							fmt.Fprintf(fociSummary, "<tr><td><strong>📍 Repository FOCI</strong></td><td>%d location(s)</td></tr>\n", len(result.RepositoryFoci))
+							fmt.Fprintf(fociSummary, "<tr><td><strong>Repository FOCI Locations</strong></td><td>%d location(s)</td></tr>\n", len(result.RepositoryFoci))
 							fmt.Fprintf(fociSummary, "<tr><td colspan=\"2\">\n")
+							fmt.Fprintf(fociSummary, "<details>\n")
+							fmt.Fprintf(fociSummary, "<summary>View Repository Location Details</summary>\n")
+							fmt.Fprintf(fociSummary, "<ul>\n")
 							for _, loc := range result.RepositoryFoci {
 								if loc.CountryName != "" {
 									flag := ""
 									if loc.ISO3166Alpha2 != "" {
-										flag = loc.ISO3166Alpha2
+										flag = fmt.Sprintf(" (%s)", loc.ISO3166Alpha2)
 									}
 									orgInfo := ""
 									if loc.OrganizationName != "" {
 										orgInfo = fmt.Sprintf(" - <em>%s</em>", loc.OrganizationName)
 									}
-									fmt.Fprintf(fociSummary, "🌍 <strong>%s</strong> (%s)%s<br>\n", loc.CountryName, flag, orgInfo)
+									fmt.Fprintf(fociSummary, "<li><strong>%s</strong>%s%s</li>\n", loc.CountryName, flag, orgInfo)
 								}
 							}
+							fmt.Fprintf(fociSummary, "</ul>\n")
+							fmt.Fprintf(fociSummary, "</details>\n")
 							fmt.Fprintf(fociSummary, "</td></tr>\n")
 						}
 
@@ -593,7 +605,7 @@ func main() {
 								userFociMap[loc.UserID] = append(userFociMap[loc.UserID], loc)
 							}
 							
-							fmt.Fprintf(fociSummary, "<tr><td><strong>👤 Contributor FOCI</strong></td><td>%d contributor(s)</td></tr>\n", len(userFociMap))
+							fmt.Fprintf(fociSummary, "<tr><td><strong>Contributor FOCI</strong></td><td>%d contributor(s)</td></tr>\n", len(userFociMap))
 							fmt.Fprintf(fociSummary, "<tr><td colspan=\"2\">\n")
 							
 							for userID, fociEntries := range userFociMap {
@@ -623,7 +635,7 @@ func main() {
 									
 									if username != "" {
 										fmt.Fprintf(fociSummary, "<details>\n")
-										fmt.Fprintf(fociSummary, "<summary><strong>👤 @%s</strong>", username)
+										fmt.Fprintf(fociSummary, "<summary><strong>@%s</strong>", username)
 										if displayName != "" && displayName != username {
 											fmt.Fprintf(fociSummary, " (%s)", displayName)
 										}
@@ -632,17 +644,17 @@ func main() {
 										
 										// Countries
 										if len(countryList) > 0 {
-											fmt.Fprintf(fociSummary, "<li>🌍 <strong>Countries:</strong> %s</li>\n", strings.Join(countryList, ", "))
+											fmt.Fprintf(fociSummary, "<li><strong>Countries:</strong> %s</li>\n", strings.Join(countryList, ", "))
 										}
 										
 										// Emails
 										if len(profile.Emails) > 0 {
-											fmt.Fprintf(fociSummary, "<li>📧 <strong>Emails:</strong> %s</li>\n", strings.Join(profile.Emails, ", "))
+											fmt.Fprintf(fociSummary, "<li><strong>Email Addresses:</strong> %s</li>\n", strings.Join(profile.Emails, ", "))
 										}
 										
 										// Locations
 										if len(profile.Locations) > 0 {
-											fmt.Fprintf(fociSummary, "<li>📍 <strong>Locations:</strong> %s</li>\n", strings.Join(profile.Locations, ", "))
+											fmt.Fprintf(fociSummary, "<li><strong>Locations:</strong> %s</li>\n", strings.Join(profile.Locations, ", "))
 										}
 										
 										// Geocoded locations
@@ -655,7 +667,7 @@ func main() {
 												if gl.Reason != "" {
 													info += fmt.Sprintf(" <em>(Reason: %s)</em>", gl.Reason)
 												}
-												fmt.Fprintf(fociSummary, "<li>🗺️ <strong>Geocoded:</strong> %s</li>\n", info)
+												fmt.Fprintf(fociSummary, "<li><strong>Geocoded Location:</strong> %s</li>\n", info)
 											}
 										}
 										
@@ -668,24 +680,24 @@ func main() {
 												}
 											}
 											if len(companyNames) > 0 {
-												fmt.Fprintf(fociSummary, "<li>🏢 <strong>Companies:</strong> %s</li>\n", strings.Join(companyNames, ", "))
+												fmt.Fprintf(fociSummary, "<li><strong>Company Affiliations:</strong> %s</li>\n", strings.Join(companyNames, ", "))
 											}
 										}
 										
 										// GitHub link
-										fmt.Fprintf(fociSummary, "<li>🔗 <a href=\"https://github.com/%s\">GitHub Profile</a></li>\n", username)
+										fmt.Fprintf(fociSummary, "<li><strong>Profile:</strong> <a href=\"https://github.com/%s\">https://github.com/%s</a></li>\n", username, username)
 										
 										fmt.Fprintf(fociSummary, "</ul>\n")
 										fmt.Fprintf(fociSummary, "</details>\n")
 									} else {
-										fmt.Fprintf(fociSummary, "👥 <strong>User ID %d</strong> - %s<br>\n", userID, strings.Join(countryList, ", "))
+										fmt.Fprintf(fociSummary, "<strong>User ID %d</strong> - %s<br>\n", userID, strings.Join(countryList, ", "))
 									}
 								} else {
 									// No profile available
 									if userID > 0 {
-										fmt.Fprintf(fociSummary, "👥 <strong>User ID %d</strong> - %s<br>\n", userID, strings.Join(countryList, ", "))
+										fmt.Fprintf(fociSummary, "<strong>User ID %d</strong> - %s<br>\n", userID, strings.Join(countryList, ", "))
 									} else {
-										fmt.Fprintf(fociSummary, "👥 %s<br>\n", strings.Join(countryList, ", "))
+										fmt.Fprintf(fociSummary, "%s<br>\n", strings.Join(countryList, ", "))
 									}
 								}
 							}
@@ -695,26 +707,36 @@ func main() {
 						// OpenSSF Scorecard section
 						if result.OpenSSFScorecard != nil {
 							sc := result.OpenSSFScorecard
-							fmt.Fprintf(fociSummary, "<tr><td><strong>🛡️ OpenSSF Score</strong></td><td><strong>%.1f/10</strong></td></tr>\n", sc.OverallScore)
+							fmt.Fprintf(fociSummary, "<tr><td><strong>OpenSSF Security Score</strong></td><td><strong>%.1f/10</strong></td></tr>\n", sc.OverallScore)
 							
-							// Show concerning checks
-							concerningChecks := []OpenSSFIndividualCheck{}
-							for _, check := range sc.IndividualResults {
-								if check.Score >= 0 && check.Score < 5 {
-									concerningChecks = append(concerningChecks, check)
-								}
-							}
-							
-							if len(concerningChecks) > 0 {
-								fmt.Fprintf(fociSummary, "<tr><td><strong>⚠️ Security Concerns</strong></td><td>%d low-score checks</td></tr>\n", len(concerningChecks))
+							// Show all checks in a collapsible section
+							if len(sc.IndividualResults) > 0 {
 								fmt.Fprintf(fociSummary, "<tr><td colspan=\"2\">\n")
-								for _, check := range concerningChecks {
+								fmt.Fprintf(fociSummary, "<details>\n")
+								fmt.Fprintf(fociSummary, "<summary><strong>View Security Assessment Details</strong> (%d checks)</summary>\n", len(sc.IndividualResults))
+								fmt.Fprintf(fociSummary, "<table style=\"margin-top: 10px; width: 100%%;\">\n")
+								fmt.Fprintf(fociSummary, "<tr><th>Check</th><th>Score</th><th>Assessment</th></tr>\n")
+								
+								for _, check := range sc.IndividualResults {
 									scoreStr := fmt.Sprintf("%d/10", check.Score)
 									if check.Score == -1 {
 										scoreStr = "N/A"
 									}
-									fmt.Fprintf(fociSummary, "⚠️ <strong>%s</strong> (%s): %s<br>\n", check.Name, scoreStr, check.Reason)
+									
+									// Color code based on score
+									rowClass := ""
+									if check.Score >= 0 && check.Score < 5 {
+										rowClass = " style=\"background-color: #ffebee;\""
+									} else if check.Score >= 5 && check.Score < 7 {
+										rowClass = " style=\"background-color: #fff3e0;\""
+									}
+									
+									fmt.Fprintf(fociSummary, "<tr%s><td><strong>%s</strong></td><td>%s</td><td>%s</td></tr>\n", 
+										rowClass, check.Name, scoreStr, check.Reason)
 								}
+								
+								fmt.Fprintf(fociSummary, "</table>\n")
+								fmt.Fprintf(fociSummary, "</details>\n")
 								fmt.Fprintf(fociSummary, "</td></tr>\n")
 							}
 						}
@@ -728,24 +750,27 @@ func main() {
 
 		// Add error section to FOCI summary
 		if fociSummary != nil && packagesWithErrors > 0 {
-			fmt.Fprintf(fociSummary, "#### ❌ Packages with API Errors\n\n")
+			fmt.Fprintf(fociSummary, "### API Query Errors\n\n")
+			fmt.Fprintf(fociSummary, "<details>\n")
+			fmt.Fprintf(fociSummary, "<summary>View Package Query Errors (%d packages)</summary>\n", packagesWithErrors)
 			fmt.Fprintf(fociSummary, "<table>\n")
-			fmt.Fprintf(fociSummary, "<tr><th>Package</th><th>Error</th></tr>\n")
+			fmt.Fprintf(fociSummary, "<tr><th>Package</th><th>Error Message</th></tr>\n")
 			for _, imp := range githubList {
 				if result, exists := githubImportResults[imp]; exists && result.Error != "" {
-					fmt.Fprintf(fociSummary, "<tr><td><code>%s</code></td><td>⚠️ %s</td></tr>\n", imp, result.Error)
+					fmt.Fprintf(fociSummary, "<tr><td><code>%s</code></td><td>%s</td></tr>\n", imp, result.Error)
 				}
 			}
-			fmt.Fprintf(fociSummary, "</table>\n\n")
+			fmt.Fprintf(fociSummary, "</table>\n")
+			fmt.Fprintf(fociSummary, "</details>\n\n")
 		}
 
 		// List packages with errors
 		if packagesWithErrors > 0 {
-			fmt.Println("#### Packages with API Errors")
+			fmt.Println("#### API Query Errors")
 			fmt.Println()
 			for _, imp := range githubList {
 				if result, exists := githubImportResults[imp]; exists && result.Error != "" {
-					fmt.Printf("- `%s`: ⚠️ %s\n", imp, result.Error)
+					fmt.Printf("- `%s`: %s\n", imp, result.Error)
 				}
 			}
 			fmt.Println()
