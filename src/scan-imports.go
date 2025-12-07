@@ -305,41 +305,6 @@ func main() {
 		// Write FOCI summary for GitHub Actions
 		if fociSummary != nil {
 			fmt.Fprintf(fociSummary, "## Detailed FOCI Analysis\n\n")
-			
-			// Summary statistics as simple list
-			fociStatus := "PASS"
-			if fociPresentCount > 0 {
-				fociStatus = "ALERT"
-			}
-			
-			fmt.Fprintf(fociSummary, "**FOCI Assessment Status:** %s\n\n", fociStatus)
-			
-			if fociPresentCount > 0 {
-				fmt.Fprintf(fociSummary, "- **Packages with FOCI:** %d\n", fociPresentCount)
-				fmt.Fprintf(fociSummary, "- **Repository FOCI Locations:** %d\n", totalRepoFoci)
-				fmt.Fprintf(fociSummary, "- **Contributors with FOCI:** %d\n", totalContributors)
-			}
-
-			// OpenSSF Scorecard summary
-			if packagesWithScorecard > 0 {
-				avgScore := totalOpenSSFScore / float64(packagesWithScorecard)
-				scoreStatus := "GOOD"
-				if avgScore < 5.0 {
-					scoreStatus = "POOR"
-				} else if avgScore < 7.0 {
-					scoreStatus = "FAIR"
-				}
-				fmt.Fprintf(fociSummary, "- **Average Security Score:** %.1f/10 (%s)\n", avgScore, scoreStatus)
-				if lowScorePackages > 0 {
-					fmt.Fprintf(fociSummary, "- **Packages with Low Security Score:** %d\n", lowScorePackages)
-				}
-			}
-
-			if packagesWithErrors > 0 {
-				fmt.Fprintf(fociSummary, "- **API Query Errors:** %d\n", packagesWithErrors)
-			}
-
-			fmt.Fprintf(fociSummary, "\n---\n\n")
 		}
 		
 		for _, imp := range githubList {
