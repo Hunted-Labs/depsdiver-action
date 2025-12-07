@@ -211,13 +211,28 @@ func main() {
 		
 		// Write FOCI summary for GitHub Actions
 		if fociSummary != nil {
-			fmt.Fprintf(fociSummary, "### FOCI Analysis\n\n")
-			fmt.Fprintf(fociSummary, "**Packages with FOCI present:** %d\n", fociPresentCount)
-			fmt.Fprintf(fociSummary, "**Total repository FOCI locations:** %d\n", totalRepoFoci)
-			fmt.Fprintf(fociSummary, "**Total user FOCI locations:** %d\n\n", totalUserFoci)
-			
+			// Summary statistics in table format
+			fmt.Fprintf(fociSummary, "<table>\n")
+			fmt.Fprintf(fociSummary, "<tr><th>FOCI Metric</th><th>Count</th></tr>\n")
+
+			// Color code based on findings
+			fociIcon := "✅"
 			if fociPresentCount > 0 {
-				fmt.Fprintf(fociSummary, "#### Packages with FOCI\n\n")
+				fociIcon = "⚠️"
+			}
+
+			fmt.Fprintf(fociSummary, "<tr><td>%s Packages with FOCI</td><td><strong>%d</strong></td></tr>\n", fociIcon, fociPresentCount)
+			fmt.Fprintf(fociSummary, "<tr><td>📍 Repository FOCI Locations</td><td><strong>%d</strong></td></tr>\n", totalRepoFoci)
+			fmt.Fprintf(fociSummary, "<tr><td>👤 User FOCI Locations</td><td><strong>%d</strong></td></tr>\n", totalUserFoci)
+
+			if packagesWithErrors > 0 {
+				fmt.Fprintf(fociSummary, "<tr><td>❌ Packages with Errors</td><td><strong>%d</strong></td></tr>\n", packagesWithErrors)
+			}
+
+			fmt.Fprintf(fociSummary, "</table>\n\n")
+
+			if fociPresentCount > 0 {
+				fmt.Fprintf(fociSummary, "#### 🚨 Packages with FOCI Details\n\n")
 			}
 		}
 		
@@ -290,46 +305,88 @@ func main() {
 					
 					// Write to FOCI summary file for GitHub Actions
 					if fociSummary != nil && result.FociPresent {
-						fmt.Fprintf(fociSummary, "**`%s`**\n", imp)
+						// Create expandable section for each package
+						fmt.Fprintf(fociSummary, "<details>\n")
+						fmt.Fprintf(fociSummary, "<summary><strong>📦 <code>%s</code></strong>", imp)
+
 						if result.Owner != "" && result.Name != "" {
-							fmt.Fprintf(fociSummary, "- Repository: `%s/%s`\n", result.Owner, result.Name)
+							fmt.Fprintf(fociSummary, " - <code>%s/%s</code>", result.Owner, result.Name)
 						}
+						fmt.Fprintf(fociSummary, "</summary>\n\n")
+
+						// Package details in table format
+						fmt.Fprintf(fociSummary, "<table>\n")
+
+						// Files using this package
 						if len(files) > 0 {
-							fmt.Fprintf(fociSummary, "- Used in files:\n")
+							fmt.Fprintf(fociSummary, "<tr><td><strong>📄 Used in Files</strong></td><td>%d file(s)</td></tr>\n", len(files))
+							fmt.Fprintf(fociSummary, "<tr><td colspan=\"2\">\n")
 							for _, file := range files {
-								fmt.Fprintf(fociSummary, "  - `%s`\n", file)
+								fmt.Fprintf(fociSummary, "• <code>%s</code><br>\n", file)
 							}
+							fmt.Fprintf(fociSummary, "</td></tr>\n")
 						}
+
+						// Repository FOCI locations
 						if len(result.RepositoryFoci) > 0 {
-							fmt.Fprintf(fociSummary, "- Repository FOCI locations: %d\n", len(result.RepositoryFoci))
+							fmt.Fprintf(fociSummary, "<tr><td><strong>📍 Repository FOCI</strong></td><td>%d location(s)</td></tr>\n", len(result.RepositoryFoci))
+							fmt.Fprintf(fociSummary, "<tr><td colspan=\"2\">\n")
 							for _, loc := range result.RepositoryFoci {
 								if loc.CountryName != "" {
-									fmt.Fprintf(fociSummary, "  - %s", loc.CountryName)
+									flag := ""
 									if loc.ISO3166Alpha2 != "" {
-										fmt.Fprintf(fociSummary, " (%s)", loc.ISO3166Alpha2)
+										flag = loc.ISO3166Alpha2
 									}
-									fmt.Fprintf(fociSummary, "\n")
+									orgInfo := ""
+									if loc.OrganizationName != "" {
+										orgInfo = fmt.Sprintf(" - <em>%s</em>", loc.OrganizationName)
+									}
+									fmt.Fprintf(fociSummary, "🌍 <strong>%s</strong> (%s)%s<br>\n", loc.CountryName, flag, orgInfo)
 								}
 							}
+							fmt.Fprintf(fociSummary, "</td></tr>\n")
 						}
+
+						// User FOCI locations
 						if len(result.UserFoci) > 0 {
-							fmt.Fprintf(fociSummary, "- User FOCI locations: %d\n", len(result.UserFoci))
+							fmt.Fprintf(fociSummary, "<tr><td><strong>👤 User FOCI</strong></td><td>%d location(s)</td></tr>\n", len(result.UserFoci))
+							fmt.Fprintf(fociSummary, "<tr><td colspan=\"2\">\n")
 							for _, loc := range result.UserFoci {
 								if loc.CountryName != "" {
-									fmt.Fprintf(fociSummary, "  - %s", loc.CountryName)
+									flag := ""
 									if loc.ISO3166Alpha2 != "" {
-										fmt.Fprintf(fociSummary, " (%s)", loc.ISO3166Alpha2)
+										flag = loc.ISO3166Alpha2
 									}
-									fmt.Fprintf(fociSummary, "\n")
+									orgInfo := ""
+									if loc.OrganizationName != "" {
+										orgInfo = fmt.Sprintf(" - <em>%s</em>", loc.OrganizationName)
+									}
+									fmt.Fprintf(fociSummary, "👥 <strong>%s</strong> (%s)%s<br>\n", loc.CountryName, flag, orgInfo)
 								}
 							}
+							fmt.Fprintf(fociSummary, "</td></tr>\n")
 						}
-						fmt.Fprintf(fociSummary, "\n")
+
+						fmt.Fprintf(fociSummary, "</table>\n")
+						fmt.Fprintf(fociSummary, "</details>\n\n")
 					}
 				}
 			}
 		}
-		
+
+		// Add error section to FOCI summary
+		if fociSummary != nil && packagesWithErrors > 0 {
+			fmt.Fprintf(fociSummary, "#### ❌ Packages with API Errors\n\n")
+			fmt.Fprintf(fociSummary, "<table>\n")
+			fmt.Fprintf(fociSummary, "<tr><th>Package</th><th>Error</th></tr>\n")
+			for _, imp := range githubList {
+				if result, exists := githubImportResults[imp]; exists && result.Error != "" {
+					fmt.Fprintf(fociSummary, "<tr><td><code>%s</code></td><td>⚠️ %s</td></tr>\n", imp, result.Error)
+				}
+			}
+			fmt.Fprintf(fociSummary, "</table>\n\n")
+		}
+
 		// List packages with errors
 		if packagesWithErrors > 0 {
 			fmt.Println("#### Packages with API Errors")

@@ -89,26 +89,45 @@ runs:
         REPORT_PATH="${{ github.workspace }}/${{ inputs.output-file }}"
         FOCI_SUMMARY_PATH="${{ github.workspace }}/foci-summary.txt"
         if [ -f "$REPORT_PATH" ]; then
-          echo "## Go Imports Scan Complete" >> $GITHUB_STEP_SUMMARY
+          # Header with icon
+          echo "## 🔍 Go Imports Scan Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "The complete import report has been generated and uploaded as an artifact." >> $GITHUB_STEP_SUMMARY
+
+          # Summary statistics table
+          echo "<table>" >> $GITHUB_STEP_SUMMARY
+          echo "<tr><th>Metric</th><th>Count</th></tr>" >> $GITHUB_STEP_SUMMARY
+          echo "<tr><td>📦 Total Third-Party Imports</td><td><strong>${{ steps.scan.outputs.total-imports }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
+          echo "<tr><td>🔗 Unique Third-Party Imports</td><td><strong>${{ steps.scan.outputs.unique-imports }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
+          echo "<tr><td>🐙 GitHub Packages</td><td><strong>${{ steps.scan.outputs.github-packages }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
+          echo "<tr><td>📚 Standard Library Packages</td><td><strong>${{ steps.scan.outputs.stdlib-packages }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
+          echo "</table>" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Total Third-Party Imports:** ${{ steps.scan.outputs.total-imports }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Unique Third-Party Imports:** ${{ steps.scan.outputs.unique-imports }}" >> $GITHUB_STEP_SUMMARY
-          echo "**GitHub Packages:** ${{ steps.scan.outputs.github-packages }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Standard Library Packages:** ${{ steps.scan.outputs.stdlib-packages }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          # Add FOCI summary if available
+
+          # Add FOCI summary in expandable section if available
           if [ -f "$FOCI_SUMMARY_PATH" ]; then
+            echo "<details open>" >> $GITHUB_STEP_SUMMARY
+            echo "<summary><strong>🌍 FOCI Analysis Results</strong></summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
             cat "$FOCI_SUMMARY_PATH" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
           fi
-          
-          echo "Download the \`${{ inputs.artifact-name }}\` artifact to view the complete report with FOCI analysis." >> $GITHUB_STEP_SUMMARY
-        else
-          echo "## Go Imports Scan Complete" >> $GITHUB_STEP_SUMMARY
+
+          # Download instructions in expandable section
+          echo "<details>" >> $GITHUB_STEP_SUMMARY
+          echo "<summary><strong>📥 Download Complete Report</strong></summary>" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "No Go files found in the project." >> $GITHUB_STEP_SUMMARY
+          echo "The complete import report with detailed FOCI analysis has been uploaded as an artifact." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Artifact Name:** \`${{ inputs.artifact-name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Retention:** ${{ inputs.artifact-retention-days }} days" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "</details>" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "## 🔍 Go Imports Scan Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> ⚠️ No Go files found in the project." >> $GITHUB_STEP_SUMMARY
         fi
 
