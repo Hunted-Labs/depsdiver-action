@@ -24,9 +24,9 @@ func main() {
 	rootDir := os.Args[1]
 	allImports := make(map[string]map[string]bool) // file -> imports
 	uniqueImports := make(map[string]bool)
-	githubImports := make(map[string]bool)
+	githubImports := make(map[string]bool) // All third-party packages (GitHub, golang.org, etc.)
 	standardLibImports := make(map[string]bool)
-	githubPackageFiles := make(map[string][]string) // package -> []files that use it
+	githubPackageFiles := make(map[string][]string) // package -> []files that use it (all third-party)
 	
 	// Get DepsDiver API configuration from environment
 	depsDiverToken := os.Getenv("DEPSDIVER_TOKEN")
@@ -71,16 +71,17 @@ func main() {
 		// Extract imports
 		for _, imp := range node.Imports {
 			importPath := strings.Trim(imp.Path.Value, "\"")
-			
+
 			// Categorize imports
 			if isStandardLibrary(importPath) {
 				standardLibImports[importPath] = true
-			} else if isGitHubPackage(importPath) {
+			} else if isThirdPartyPackage(importPath) {
+				// All third-party packages (GitHub and others)
 				githubImports[importPath] = true
-				// Track which files use this GitHub package
+				// Track which files use this package
 				githubPackageFiles[importPath] = append(githubPackageFiles[importPath], relPath)
 			} else {
-				// Only track non-standard, non-GitHub imports
+				// Fallback for any other imports
 				imports[importPath] = true
 				uniqueImports[importPath] = true
 			}
@@ -98,9 +99,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Query DepsDiver API for each GitHub import if token is provided
+	// Query DepsDiver API for each third-party package if token is provided
 	if depsDiverToken != "" && len(githubImports) > 0 {
-		fmt.Fprintf(os.Stderr, "Querying DepsDiver API for %d GitHub packages...\n", len(githubImports))
+		fmt.Fprintf(os.Stderr, "Querying DepsDiver API for %d third-party packages...\n", len(githubImports))
 		client := &http.Client{
 			Timeout: 30 * time.Second,
 		}
@@ -182,7 +183,7 @@ func main() {
 
 	// Generate report
 	fmt.Println("# Go Imports Report")
-	fmt.Println("(Standard library and GitHub packages filtered out)")
+	fmt.Println("(Standard library and recognized third-party packages filtered out)")
 	fmt.Printf("Generated: %s\n\n", getCurrentTime())
 
 	// Sort file paths
@@ -265,9 +266,9 @@ func main() {
 	fmt.Println()
 	fmt.Println("## Summary")
 	fmt.Println()
-	fmt.Printf("Total third-party imports (excluding stdlib and GitHub): %d\n", totalImports)
-	fmt.Printf("Unique third-party imports: %d\n", len(uniqueImports))
-	fmt.Printf("GitHub packages found: %d\n", len(githubImports))
+	fmt.Printf("Total other imports (excluding stdlib and recognized third-party): %d\n", totalImports)
+	fmt.Printf("Unique other imports: %d\n", len(uniqueImports))
+	fmt.Printf("Third-party packages found: %d\n", len(githubImports))
 	fmt.Printf("Standard library packages found: %d\n", len(standardLibImports))
 	fmt.Println()
 	
@@ -314,8 +315,15 @@ func main() {
 					// Get files that use this package
 					files := githubPackageFiles[imp]
 					sort.Strings(files)
-					
+
+					// Generate report URL
+					encodedPackage := url.QueryEscape(imp)
+					baseURL := strings.TrimSuffix(depsDiverAPIURL, "/api")
+					reportURL := fmt.Sprintf("%s/analyze/%s?ecosystem=go#overview", baseURL, encodedPackage)
+
 					fmt.Printf("#### `%s`\n", imp)
+					fmt.Println()
+					fmt.Printf("**🔗 [View Full Report on Hunted Labs](%s)**\n", reportURL)
 					fmt.Println()
 					if result.Owner != "" && result.Name != "" {
 						fmt.Printf("**Repository:** `%s/%s`\n", result.Owner, result.Name)
@@ -323,7 +331,7 @@ func main() {
 					if result.RepositoryID != 0 {
 						fmt.Printf("**Repository ID:** %d\n", result.RepositoryID)
 					}
-					
+
 					// FOCI Status
 					if result.FociPresent {
 						fmt.Printf("**FOCI Status:** DETECTED\n")
@@ -505,6 +513,11 @@ func main() {
 					
 					// Write to FOCI summary file for GitHub Actions
 					if fociSummary != nil && result.FociPresent {
+						// Generate report URL for HTML summary
+						encodedPackageHTML := url.QueryEscape(imp)
+						baseURLHTML := strings.TrimSuffix(depsDiverAPIURL, "/api")
+						reportURLHTML := fmt.Sprintf("%s/analyze/%s?ecosystem=go#overview", baseURLHTML, encodedPackageHTML)
+
 						// Create expandable section for each package
 						fmt.Fprintf(fociSummary, "<details>\n")
 						fmt.Fprintf(fociSummary, "<summary><strong>Package: <code>%s</code></strong>", imp)
@@ -513,6 +526,9 @@ func main() {
 							fmt.Fprintf(fociSummary, " - <code>%s/%s</code>", result.Owner, result.Name)
 						}
 						fmt.Fprintf(fociSummary, "</summary>\n\n")
+
+						// Add link to full report
+						fmt.Fprintf(fociSummary, "<p>🔗 <a href=\"%s\"><strong>View Full Report on Hunted Labs</strong></a></p>\n\n", reportURLHTML)
 
 						// Files using this package
 						if len(files) > 0 {
@@ -726,9 +742,9 @@ func main() {
 		}
 	}
 
-	// GitHub packages section (just list, no FOCI details)
+	// Third-party packages section (just list, no FOCI details)
 	if len(githubImports) > 0 {
-		fmt.Println("### GitHub Packages")
+		fmt.Println("### Third-Party Packages")
 		fmt.Println()
 		githubList := make([]string, 0, len(githubImports))
 		for imp := range githubImports {
@@ -740,10 +756,10 @@ func main() {
 		}
 		fmt.Println()
 	}
-	
-	// Third-party imports (non-stdlib, non-GitHub)
+
+	// Other imports (non-stdlib, non-recognized third-party)
 	if len(uniqueImports) > 0 {
-		fmt.Println("### All Unique Third-Party Imports (excluding stdlib and GitHub)")
+		fmt.Println("### Other Imports (excluding stdlib and recognized third-party)")
 		fmt.Println()
 	uniqueList := make([]string, 0, len(uniqueImports))
 	for imp := range uniqueImports {
@@ -777,9 +793,20 @@ func isStandardLibrary(importPath string) bool {
 	return !strings.Contains(firstSegment, ".")
 }
 
-// isGitHubPackage checks if an import path is from GitHub.
-func isGitHubPackage(importPath string) bool {
-	return strings.HasPrefix(importPath, "github.com/")
+// isThirdPartyPackage checks if an import path is from a third-party source.
+// This includes github.com, golang.org, go.opentelemetry.io, google.golang.org, etc.
+// Any package with a dot in the first segment is considered third-party.
+func isThirdPartyPackage(importPath string) bool {
+	if importPath == "" {
+		return false
+	}
+
+	// Get the first segment of the path
+	firstSegment := strings.Split(importPath, "/")[0]
+
+	// Third-party packages have dots in the first segment (domain names)
+	// Examples: "github.com", "golang.org", "go.opentelemetry.io", "google.golang.org"
+	return strings.Contains(firstSegment, ".")
 }
 
 // PackageInfo represents the information returned from the DepsDiver API
