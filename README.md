@@ -11,13 +11,9 @@ A GitHub Action that scans all Go files in your project and extracts all import 
 - 🎯 Automatically skips `vendor/`, `.git/`, and `node_modules/` directories
 - 📦 Uploads the report as a downloadable artifact
 - ✨ Displays a summary in the GitHub Actions UI
-- 🔒 Integrates with HLTI API to fetch threat intelligence data for GitHub packages hello
+- 🔒 Integrates with DepsDiver API to fetch threat intelligence data for GitHub packages
 
 ## Usage
-- ✨ Displays a summary in the GitHub Actions UI hello
-- 🔒 Integrates with HLTI API to fetch threat intelligence data for GitHub packages 
-  
-## Usage 
 
 ### Basic Usage
 
@@ -40,7 +36,7 @@ jobs:
         uses: your-username/hl-action@v1
 ```
 
-### Advanced Usage with HLTI API
+### Advanced Usage with DepsDiver API
 
 ```yaml
 name: Scan Go Imports
@@ -64,8 +60,8 @@ jobs:
           output-file: 'imports.txt'       # Optional: output file name (default: 'go-imports-report.txt')
           artifact-name: 'import-report'   # Optional: artifact name (default: 'go-imports-report')
           artifact-retention-days: '7'     # Optional: artifact retention days (default: '30')
-          hlti-api-url: 'https://your-api-url.com'  # Required: HLTI API base URL
-          hlti-token: ${{ secrets.HLTI_TOKEN }}     # Required: HLTI API token (recommended to use secret)
+          depsdiver-api-url: 'https://your-api-url.com'  # Required: DepsDiver API base URL
+          depsdiver-token: ${{ secrets.DEPSDIVER_TOKEN }}     # Required: DepsDiver API token (recommended to use secret)
       
       - name: Use scan results
         run: |
@@ -74,25 +70,25 @@ jobs:
           echo "Report file: ${{ steps.scan.outputs.report-file }}"
 ```
 
-### Setting Up HLTI API Token
+### Setting Up DepsDiver API Token
 
 #### Option 1: Using GitHub Secrets (Recommended)
 
 1. Go to your repository on GitHub
 2. Navigate to **Settings** → **Secrets and variables** → **Actions**
 3. Click **New repository secret**
-4. Name: `HLTI_TOKEN`
-5. Value: Your HLTI API token (should start with `hl_` and be 59 characters)
+4. Name: `DEPSDIVER_TOKEN`
+5. Value: Your DepsDiver API token
 6. Click **Add secret**
 
-Then in your workflow, the token will be automatically used if you don't specify `hlti-token` input:
+Then in your workflow, the token will be automatically used if you don't specify `depsdiver-token` input:
 
 ```yaml
 - name: Scan Go imports
   uses: your-username/hl-action@v1
   with:
-    hlti-api-url: 'https://your-api-url.com'
-    # Token is automatically pulled from secrets.HLTI_TOKEN
+    depsdiver-api-url: 'https://your-api-url.com'
+    # Token is automatically pulled from secrets.DEPSDIVER_TOKEN
 ```
 
 #### Option 2: Explicitly Pass Token
@@ -103,8 +99,8 @@ You can also explicitly pass the token as an input:
 - name: Scan Go imports
   uses: your-username/hl-action@v1
   with:
-    hlti-api-url: 'https://your-api-url.com'
-    hlti-token: ${{ secrets.HLTI_TOKEN }}
+    depsdiver-api-url: 'https://your-api-url.com'
+    depsdiver-token: ${{ secrets.DEPSDIVER_TOKEN }}
 ```
 
 #### Option 3: Organization/Repository Secrets
@@ -113,7 +109,7 @@ For organization-wide or repository-level secrets:
 - **Organization secrets**: Settings → Secrets and variables → Actions → New organization secret
 - **Repository secrets**: Settings → Secrets and variables → Actions → New repository secret
 
-The action will automatically use `secrets.HLTI_TOKEN` if available, even if not explicitly passed.
+The action will automatically use `secrets.DEPSDIVER_TOKEN` if available, even if not explicitly passed.
 
 ## Inputs
 
@@ -123,8 +119,8 @@ The action will automatically use `secrets.HLTI_TOKEN` if available, even if not
 | `output-file` | Output file name for the import report | No | `go-imports-report.txt` |
 | `artifact-name` | Name of the artifact to upload | No | `go-imports-report` |
 | `artifact-retention-days` | Number of days to retain the artifact | No | `30` |
-| `hlti-api-url` | HLTI API base URL (e.g., `https://api.example.com`) | Yes* | `https://api.example.com` |
-| `hlti-token` | HLTI API token (should be set as secret) | Yes* | (uses `secrets.HLTI_TOKEN` if available) |
+| `depsdiver-api-url` | DepsDiver API base URL (e.g., `https://api.example.com`) | Yes* | `https://api.example.com` |
+| `depsdiver-token` | DepsDiver API token (should be set as secret) | Yes* | (uses `secrets.DEPSDIVER_TOKEN` if available) |
 
 \* Required if you want to query threat intelligence data for GitHub packages. If not provided, the action will still scan imports but won't query the API.
 

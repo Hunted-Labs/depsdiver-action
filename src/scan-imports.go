@@ -28,11 +28,11 @@ func main() {
 	standardLibImports := make(map[string]bool)
 	githubPackageFiles := make(map[string][]string) // package -> []files that use it
 	
-	// Get HLTI API configuration from environment
-	hltiToken := os.Getenv("HLTI_TOKEN")
-	hltiAPIURL := os.Getenv("HLTI_API_URL")
-	if hltiAPIURL == "" {
-		hltiAPIURL = "https://api.example.com" // default, should be overridden
+	// Get DepsDiver API configuration from environment
+	depsDiverToken := os.Getenv("DEPSDIVER_TOKEN")
+	depsDiverAPIURL := os.Getenv("DEPSDIVER_API_URL")
+	if depsDiverAPIURL == "" {
+		depsDiverAPIURL = "https://api.example.com" // default, should be overridden
 	}
 	
 	// Map to store API results for each GitHub import
@@ -98,18 +98,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Query HLTI API for each GitHub import if token is provided
-	if hltiToken != "" && len(githubImports) > 0 {
-		fmt.Fprintf(os.Stderr, "Querying HLTI API for %d GitHub packages...\n", len(githubImports))
+	// Query DepsDiver API for each GitHub import if token is provided
+	if depsDiverToken != "" && len(githubImports) > 0 {
+		fmt.Fprintf(os.Stderr, "Querying DepsDiver API for %d GitHub packages...\n", len(githubImports))
 		client := &http.Client{
 			Timeout: 30 * time.Second,
 		}
-		
+
 		// Track unique user IDs to avoid duplicate fetches
 		fetchedUserProfiles := make(map[int]*UserProfile)
-		
+
 		for importPath := range githubImports {
-			info, err := queryHLTIAPI(client, hltiAPIURL, hltiToken, importPath)
+			info, err := queryDepsDiverAPI(client, depsDiverAPIURL, depsDiverToken, importPath)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: Failed to query API for %s: %v\n", importPath, err)
 				githubImportResults[importPath] = &PackageInfo{
@@ -121,7 +121,7 @@ func main() {
 				
 				// Fetch OpenSSF scorecard for the repository
 				if info.RepositoryID > 0 {
-					scorecard, err := queryOpenSSFScorecard(client, hltiAPIURL, hltiToken, info.RepositoryID)
+					scorecard, err := queryOpenSSFScorecard(client, depsDiverAPIURL, depsDiverToken, info.RepositoryID)
 					if err != nil {
 						fmt.Fprintf(os.Stderr, "Warning: Failed to fetch OpenSSF scorecard for %s: %v\n", importPath, err)
 					} else if scorecard != nil {
@@ -150,7 +150,7 @@ func main() {
 					continue
 				}
 				
-				profile, err := queryUserProfile(client, hltiAPIURL, hltiToken, userID)
+				profile, err := queryUserProfile(client, depsDiverAPIURL, depsDiverToken, userID)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: Failed to fetch user profile for ID %d: %v\n", userID, err)
 				} else if profile != nil {
@@ -782,7 +782,7 @@ func isGitHubPackage(importPath string) bool {
 	return strings.HasPrefix(importPath, "github.com/")
 }
 
-// PackageInfo represents the information returned from the HLTI API
+// PackageInfo represents the information returned from the DepsDiver API
 type PackageInfo struct {
 	ImportPath       string
 	RepositoryID     int64
@@ -893,20 +893,21 @@ type OpenSSFIndividualCheck struct {
 	Details          []string `json:"Details"`
 }
 
-// queryHLTIAPI queries the HLTI API for package information
-func queryHLTIAPI(client *http.Client, apiURL, token, importPath string) (*PackageInfo, error) {
+// queryDepsDiverAPI queries the DepsDiver API for package information
+func queryDepsDiverAPI(client *http.Client, apiURL, token, importPath string) (*PackageInfo, error) {
 	// For GitHub packages, use "go" as ecosystem and the full import path as package name
 	// URL encode the package name
 	encodedPackage := url.QueryEscape(importPath)
 	// Use the /foci/present endpoint
-	apiEndpoint := fmt.Sprintf("%s/foci/present/go/%s?token=%s", strings.TrimSuffix(apiURL, "/"), encodedPackage, url.QueryEscape(token))
-	
+	apiEndpoint := fmt.Sprintf("%s/foci/present/go/%s", strings.TrimSuffix(apiURL, "/"), encodedPackage)
+
 	req, err := http.NewRequest("GET", apiEndpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	
+
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	
 	resp, err := client.Do(req)
 	if err != nil {
@@ -966,14 +967,15 @@ func queryHLTIAPI(client *http.Client, apiURL, token, importPath string) (*Packa
 
 // queryUserProfile fetches user profile from /api/user/id/{userId}
 func queryUserProfile(client *http.Client, apiURL, token string, userID int) (*UserProfile, error) {
-	apiEndpoint := fmt.Sprintf("%s/user/id/%d?token=%s", strings.TrimSuffix(apiURL, "/"), userID, url.QueryEscape(token))
-	
+	apiEndpoint := fmt.Sprintf("%s/user/id/%d", strings.TrimSuffix(apiURL, "/"), userID)
+
 	req, err := http.NewRequest("GET", apiEndpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	
+
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	
 	resp, err := client.Do(req)
 	if err != nil {
@@ -1000,14 +1002,15 @@ func queryUserProfile(client *http.Client, apiURL, token string, userID int) (*U
 
 // queryOpenSSFScorecard fetches OpenSSF scorecard from /api/repository/{repoId}/ossf_scorecards
 func queryOpenSSFScorecard(client *http.Client, apiURL, token string, repoID int64) (*OpenSSFScorecard, error) {
-	apiEndpoint := fmt.Sprintf("%s/repository/%d/ossf_scorecards?token=%s", strings.TrimSuffix(apiURL, "/"), repoID, url.QueryEscape(token))
-	
+	apiEndpoint := fmt.Sprintf("%s/repository/%d/ossf_scorecards", strings.TrimSuffix(apiURL, "/"), repoID)
+
 	req, err := http.NewRequest("GET", apiEndpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	
+
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	
 	resp, err := client.Do(req)
 	if err != nil {

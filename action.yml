@@ -20,12 +20,12 @@ inputs:
     description: 'Number of days to retain the artifact'
     required: false
     default: '30'
-  hlti-api-url:
-    description: 'HLTI API base URL (e.g., https://snarf.huntedlabs.dev/api)'
+  depsdiver-api-url:
+    description: 'DepsDiver API base URL (e.g., https://depsdiver.com/api)'
     required: false
     default: ''
-  hlti-token:
-    description: 'HLTI API token (should be set as secret)'
+  depsdiver-token:
+    description: 'DepsDiver API token (should be set as secret)'
     required: false
     default: ''
 outputs:
@@ -51,8 +51,8 @@ runs:
       id: scan
       shell: bash
       env:
-        HLTI_TOKEN: ${{ inputs.hlti-token }}
-        HLTI_API_URL: ${{ inputs.hlti-api-url }}
+        DEPSDIVER_TOKEN: ${{ inputs.depsdiver-token }}
+        DEPSDIVER_API_URL: ${{ inputs.depsdiver-api-url }}
         FOCI_SUMMARY_FILE: "${{ github.workspace }}/foci-summary.txt"
       run: |
         # Run the scanner from the action directory
