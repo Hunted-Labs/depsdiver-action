@@ -32,11 +32,11 @@ outputs:
   report-file:
     description: 'Path to the generated report file'
   total-imports:
-    description: 'Total number of third-party import statements found (excluding stdlib and GitHub)'
+    description: 'Total number of other import statements found (excluding stdlib and recognized third-party)'
   unique-imports:
-    description: 'Number of unique third-party imports found (excluding stdlib and GitHub)'
+    description: 'Number of unique other imports found (excluding stdlib and recognized third-party)'
   github-packages:
-    description: 'Number of GitHub packages found'
+    description: 'Number of third-party packages found (GitHub, golang.org, go.opentelemetry.io, etc.)'
   stdlib-packages:
     description: 'Number of standard library packages found'
 runs:
@@ -62,9 +62,9 @@ runs:
         # Extract summary stats from the report
         REPORT_PATH="${{ github.workspace }}/${{ inputs.output-file }}"
         if [ -f "$REPORT_PATH" ]; then
-          TOTAL=$(grep -E "^Total third-party imports" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
-          UNIQUE=$(grep -E "^Unique third-party imports" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
-          GITHUB=$(grep -E "^GitHub packages found:" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
+          TOTAL=$(grep -E "^Total other imports" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
+          UNIQUE=$(grep -E "^Unique other imports" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
+          GITHUB=$(grep -E "^Third-party packages found:" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
           STDLIB=$(grep -E "^Standard library packages found:" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
           echo "total-imports=$TOTAL" >> $GITHUB_OUTPUT
           echo "unique-imports=$UNIQUE" >> $GITHUB_OUTPUT
@@ -96,10 +96,10 @@ runs:
           # Summary statistics table
           echo "<table>" >> $GITHUB_STEP_SUMMARY
           echo "<tr><th>Metric</th><th>Count</th></tr>" >> $GITHUB_STEP_SUMMARY
-          echo "<tr><td>📦 Total Third-Party Imports</td><td><strong>${{ steps.scan.outputs.total-imports }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
-          echo "<tr><td>🔗 Unique Third-Party Imports</td><td><strong>${{ steps.scan.outputs.unique-imports }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
-          echo "<tr><td>🐙 GitHub Packages</td><td><strong>${{ steps.scan.outputs.github-packages }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
-          echo "<tr><td>📚 Standard Library Packages</td><td><strong>${{ steps.scan.outputs.stdlib-packages }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
+          echo "<tr><td>Total Other Imports</td><td><strong>${{ steps.scan.outputs.total-imports }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
+          echo "<tr><td>Unique Other Imports</td><td><strong>${{ steps.scan.outputs.unique-imports }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
+          echo "<tr><td>Third-Party Packages</td><td><strong>${{ steps.scan.outputs.github-packages }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
+          echo "<tr><td>Standard Library Packages</td><td><strong>${{ steps.scan.outputs.stdlib-packages }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
           echo "</table>" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
