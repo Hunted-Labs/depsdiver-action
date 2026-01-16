@@ -21,8 +21,8 @@ jobs:
           path: '.'
           output-file: 'report.md'
           artifact-name: 'report'
-          hlti-api-url: ${{ secrets.HLTI_API_URL }}  # Required: HLTI API base URL
-          hlti-token: ${{ secrets.HLTI_TOKEN }}
+          depsdiver-api-url: ${{ secrets.DEPSDIVER_API_URL }}  # Required: DepsDiver API base URL
+          depsdiver-token: ${{ secrets.DEPSDIVER_TOKEN }}
           
       - name: Display results
         run: |
