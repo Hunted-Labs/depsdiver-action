@@ -61,7 +61,7 @@ jobs:
           artifact-name: 'import-report'   # Optional: artifact name (default: 'go-imports-report')
           artifact-retention-days: '7'     # Optional: artifact retention days (default: '30')
           depsdiver-api-url: 'https://your-api-url.com'  # Required: DepsDiver API base URL
-          depsdiver-token: ${{ secrets.DEPSDIVER_TOKEN }}     # Required: DepsDiver API token (recommended to use secret)
+          depsdiver-token: ${{ secrets.DEPSDIVER_API_TOKEN }}     # Required: DepsDiver API token (recommended to use secret)
       
       - name: Use scan results
         run: |
@@ -100,7 +100,7 @@ You can also explicitly pass the token as an input:
   uses: your-username/hl-action@v1
   with:
     depsdiver-api-url: 'https://your-api-url.com'
-    depsdiver-token: ${{ secrets.DEPSDIVER_TOKEN }}
+    depsdiver-token: ${{ secrets.DEPSDIVER_API_TOKEN }}
 ```
 
 #### Option 3: Organization/Repository Secrets
@@ -120,7 +120,7 @@ The action will automatically use `secrets.DEPSDIVER_TOKEN` if available, even i
 | `artifact-name` | Name of the artifact to upload | No | `go-imports-report` |
 | `artifact-retention-days` | Number of days to retain the artifact | No | `30` |
 | `depsdiver-api-url` | DepsDiver API base URL (e.g., `https://api.example.com`) | Yes* | `https://api.example.com` |
-| `depsdiver-token` | DepsDiver API token (should be set as secret) | Yes* | (uses `secrets.DEPSDIVER_TOKEN` if available) |
+| `depsdiver-token` | DepsDiver API token (should be set as secret) | Yes* | (uses `secrets.DEPSDIVER_API_TOKEN` if available) |
 
 \* Required if you want to query threat intelligence data for GitHub packages. If not provided, the action will still scan imports but won't query the API.
 
