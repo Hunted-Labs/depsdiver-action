@@ -22,7 +22,7 @@ jobs:
           output-file: 'report.md'
           artifact-name: 'report'
           depsdiver-api-url: ${{ secrets.DEPSDIVER_API_URL }}  # Required: DepsDiver API base URL
-          depsdiver-token: ${{ secrets.DEPSDIVER_TOKEN }}
+          depsdiver-token: ${{ secrets.DEPSDIVER_API_TOKEN }}
           
       - name: Display results
         run: |
