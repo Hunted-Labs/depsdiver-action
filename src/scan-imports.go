@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -27,14 +28,23 @@ func main() {
 	githubImports := make(map[string]bool) // All third-party packages (GitHub, golang.org, etc.)
 	standardLibImports := make(map[string]bool)
 	githubPackageFiles := make(map[string][]string) // package -> []files that use it (all third-party)
-	
+
 	// Get DepsDiver API configuration from environment
 	depsDiverToken := os.Getenv("DEPSDIVER_TOKEN")
 	depsDiverAPIURL := os.Getenv("DEPSDIVER_API_URL")
+
+	// Get FOCI threshold (-1 means disabled; otherwise 0-100 percent)
+	// Packages with change_ratio above this threshold are flagged in the report.
+	fociThreshold := -1.0
+	if thresholdStr := os.Getenv("FOCI_THRESHOLD"); thresholdStr != "" {
+		if t, err := strconv.ParseFloat(thresholdStr, 64); err == nil && t >= 0 && t <= 100 {
+			fociThreshold = t
+		}
+	}
 	if depsDiverAPIURL == "" {
 		depsDiverAPIURL = "https://api.example.com" // default, should be overridden
 	}
-	
+
 	// Map to store API results for each GitHub import
 	githubImportResults := make(map[string]*PackageInfo)
 
@@ -119,7 +129,7 @@ func main() {
 				}
 			} else {
 				githubImportResults[importPath] = info
-				
+
 				// Fetch OpenSSF scorecard for the repository
 				if info.RepositoryID > 0 {
 					scorecard, err := queryOpenSSFScorecard(client, depsDiverAPIURL, depsDiverToken, info.RepositoryID)
@@ -134,7 +144,7 @@ func main() {
 			// Small delay to avoid rate limiting
 			time.Sleep(100 * time.Millisecond)
 		}
-		
+
 		// Second pass: fetch user profiles for all unique user IDs across all packages
 		fmt.Fprintf(os.Stderr, "Fetching user profiles...\n")
 		for _, info := range githubImportResults {
@@ -150,7 +160,7 @@ func main() {
 				if _, exists := fetchedUserProfiles[userID]; exists {
 					continue
 				}
-				
+
 				profile, err := queryUserProfile(client, depsDiverAPIURL, depsDiverToken, userID)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: Failed to fetch user profile for ID %d: %v\n", userID, err)
@@ -160,7 +170,7 @@ func main() {
 				time.Sleep(50 * time.Millisecond) // Small delay
 			}
 		}
-		
+
 		// Assign fetched profiles to package infos
 		for _, info := range githubImportResults {
 			if info.Error != "" || info.UserFoci == nil {
@@ -177,7 +187,7 @@ func main() {
 				}
 			}
 		}
-		
+
 		fmt.Fprintf(os.Stderr, "Fetched %d user profiles\n", len(fetchedUserProfiles))
 	}
 
@@ -219,7 +229,7 @@ func main() {
 	packagesWithScorecard := 0
 	lowScorePackages := 0
 	totalOpenSSFScore := 0.0
-	
+
 	// Output FOCI summary to a file for GitHub Actions summary
 	fociSummaryFile := os.Getenv("FOCI_SUMMARY_FILE")
 	var fociSummary *os.File
@@ -230,17 +240,23 @@ func main() {
 			defer fociSummary.Close()
 		}
 	}
-	
+
 	for _, result := range githubImportResults {
 		if result.Error != "" {
 			packagesWithErrors++
 		} else {
-			if result.FociPresent {
+			// When threshold is set, count packages exceeding the change_ratio threshold.
+			// When unset, fall back to the boolean FociPresent flag.
+			if fociThreshold >= 0 {
+				if result.ChangeRatio*100 > fociThreshold {
+					fociPresentCount++
+				}
+			} else if result.FociPresent {
 				fociPresentCount++
 			}
 			totalRepoFoci += len(result.RepositoryFoci)
 			totalUserFoci += len(result.UserFoci)
-			
+
 			// Count unique contributors
 			userSet := make(map[int]bool)
 			for _, uf := range result.UserFoci {
@@ -249,7 +265,7 @@ func main() {
 				}
 			}
 			totalContributors += len(userSet)
-			
+
 			// OpenSSF statistics
 			if result.OpenSSFScorecard != nil {
 				packagesWithScorecard++
@@ -271,7 +287,7 @@ func main() {
 	fmt.Printf("Third-party packages found: %d\n", len(githubImports))
 	fmt.Printf("Standard library packages found: %d\n", len(standardLibImports))
 	fmt.Println()
-	
+
 	// FOCI Summary with detailed information
 	if len(githubImportResults) > 0 {
 		fmt.Println("### FOCI Analysis")
@@ -279,7 +295,7 @@ func main() {
 		fmt.Printf("Packages with FOCI present: %d\n", fociPresentCount)
 		fmt.Printf("Total repository FOCI locations: %d\n", totalRepoFoci)
 		fmt.Printf("Total contributors with FOCI: %d\n", totalContributors)
-		
+
 		// OpenSSF Scorecard summary
 		if packagesWithScorecard > 0 {
 			avgScore := totalOpenSSFScore / float64(packagesWithScorecard)
@@ -290,27 +306,33 @@ func main() {
 				fmt.Printf("WARNING: Packages with low security score (<5): %d\n", lowScorePackages)
 			}
 		}
-		
+
 		if packagesWithErrors > 0 {
 			fmt.Printf("\nPackages with API errors: %d\n", packagesWithErrors)
 		}
 		fmt.Println()
-		
+
 		// Detailed FOCI information by package
 		githubList := make([]string, 0, len(githubImports))
 		for imp := range githubImports {
 			githubList = append(githubList, imp)
 		}
 		sort.Strings(githubList)
-		
+
 		// Write FOCI summary for GitHub Actions
 		if fociSummary != nil {
 			fmt.Fprintf(fociSummary, "## Detailed FOCI Analysis\n\n")
 		}
-		
+
 		for _, imp := range githubList {
 			if result, exists := githubImportResults[imp]; exists && result.Error == "" {
-				hasFociData := result.FociPresent || len(result.RepositoryFoci) > 0 || len(result.UserFoci) > 0
+				var hasFociData bool
+				if fociThreshold >= 0 {
+					// Only flag packages where change_ratio exceeds threshold
+					hasFociData = result.ChangeRatio*100 > fociThreshold
+				} else {
+					hasFociData = result.FociPresent || len(result.RepositoryFoci) > 0 || len(result.UserFoci) > 0
+				}
 				if hasFociData {
 					// Get files that use this package
 					files := githubPackageFiles[imp]
@@ -338,7 +360,8 @@ func main() {
 					} else {
 						fmt.Printf("**FOCI Status:** NOT DETECTED\n")
 					}
-					
+					fmt.Printf("**FOCI Change Ratio:** %.1f%%\n", result.ChangeRatio*100)
+
 					// Repository FOCI
 					if len(result.RepositoryFoci) > 0 {
 						fmt.Printf("\n**Repository FOCI Locations** (%d):\n", len(result.RepositoryFoci))
@@ -359,7 +382,7 @@ func main() {
 							}
 						}
 					}
-					
+
 					// User FOCI - Enhanced with user profile information
 					if len(result.UserFoci) > 0 {
 						// Group by user ID
@@ -368,7 +391,7 @@ func main() {
 							userID := loc.UserID
 							userFociMap[userID] = append(userFociMap[userID], loc)
 						}
-						
+
 						fmt.Printf("\n**Contributor FOCI Analysis** (%d contributors):\n", len(userFociMap))
 						for userID, fociEntries := range userFociMap {
 							// Get unique countries for this user
@@ -383,7 +406,7 @@ func main() {
 								countryList = append(countryList, c)
 							}
 							sort.Strings(countryList)
-							
+
 							// Get user profile if available
 							if profile, exists := result.UserProfiles[userID]; exists && profile != nil {
 								username := ""
@@ -394,7 +417,7 @@ func main() {
 								if len(profile.Names) > 0 {
 									displayName = profile.Names[0]
 								}
-								
+
 								if username != "" {
 									fmt.Printf("\n  - **@%s**", username)
 									if displayName != "" && displayName != username {
@@ -404,12 +427,12 @@ func main() {
 								} else {
 									fmt.Printf("\n  - **User ID %d**\n", userID)
 								}
-								
+
 								// Show countries
 								if len(countryList) > 0 {
 									fmt.Printf("    - **Countries:** %s\n", strings.Join(countryList, ", "))
 								}
-								
+
 								// Show emails (first few)
 								if len(profile.Emails) > 0 {
 									emailsToShow := profile.Emails
@@ -422,12 +445,12 @@ func main() {
 									}
 									fmt.Printf("\n")
 								}
-								
+
 								// Show locations
 								if len(profile.Locations) > 0 {
 									fmt.Printf("    - **Locations:** %s\n", strings.Join(profile.Locations, ", "))
 								}
-								
+
 								// Show geocoded locations with reasons
 								if len(profile.GeocodedLocation) > 0 {
 									for _, gl := range profile.GeocodedLocation {
@@ -441,7 +464,7 @@ func main() {
 										fmt.Printf("    - **Geocoded Location:** %s\n", info)
 									}
 								}
-								
+
 								// Show companies
 								if len(profile.Companies) > 0 {
 									companyNames := make([]string, 0, len(profile.Companies))
@@ -454,7 +477,7 @@ func main() {
 										fmt.Printf("    - **Companies:** %s\n", strings.Join(companyNames, ", "))
 									}
 								}
-								
+
 								// GitHub profile link
 								if username != "" {
 									fmt.Printf("    - **GitHub Profile:** https://github.com/%s\n", username)
@@ -488,7 +511,7 @@ func main() {
 						if sc.ScorecardVersion != "" {
 							fmt.Printf("- **Scorecard Version:** %s\n", sc.ScorecardVersion)
 						}
-						
+
 						// Show individual checks with concerning scores (< 5)
 						concerningChecks := []OpenSSFIndividualCheck{}
 						for _, check := range sc.IndividualResults {
@@ -496,7 +519,7 @@ func main() {
 								concerningChecks = append(concerningChecks, check)
 							}
 						}
-						
+
 						if len(concerningChecks) > 0 {
 							fmt.Printf("\n**Security Concerns Identified** (%d checks with low scores):\n", len(concerningChecks))
 							for _, check := range concerningChecks {
@@ -508,9 +531,9 @@ func main() {
 							}
 						}
 					}
-					
+
 					fmt.Println()
-					
+
 					// Write to FOCI summary file for GitHub Actions
 					if fociSummary != nil && result.FociPresent {
 						// Generate report URL for HTML summary
@@ -573,9 +596,9 @@ func main() {
 							for _, loc := range result.UserFoci {
 								userFociMap[loc.UserID] = append(userFociMap[loc.UserID], loc)
 							}
-							
+
 							fmt.Fprintf(fociSummary, "<p><strong>Contributor FOCI:</strong> %d contributor(s)</p>\n", len(userFociMap))
-							
+
 							for userID, fociEntries := range userFociMap {
 								// Get unique countries
 								countries := make(map[string]bool)
@@ -589,7 +612,7 @@ func main() {
 									countryList = append(countryList, c)
 								}
 								sort.Strings(countryList)
-								
+
 								// Get user profile if available
 								if profile, exists := result.UserProfiles[userID]; exists && profile != nil {
 									username := ""
@@ -600,7 +623,7 @@ func main() {
 									if len(profile.Names) > 0 {
 										displayName = profile.Names[0]
 									}
-									
+
 									if username != "" {
 										fmt.Fprintf(fociSummary, "<details>\n")
 										fmt.Fprintf(fociSummary, "<summary><strong>@%s</strong>", username)
@@ -609,22 +632,22 @@ func main() {
 										}
 										fmt.Fprintf(fociSummary, " - %s</summary>\n", strings.Join(countryList, ", "))
 										fmt.Fprintf(fociSummary, "<ul>\n")
-										
+
 										// Countries
 										if len(countryList) > 0 {
 											fmt.Fprintf(fociSummary, "<li><strong>Countries:</strong> %s</li>\n", strings.Join(countryList, ", "))
 										}
-										
+
 										// Emails
 										if len(profile.Emails) > 0 {
 											fmt.Fprintf(fociSummary, "<li><strong>Email Addresses:</strong> %s</li>\n", strings.Join(profile.Emails, ", "))
 										}
-										
+
 										// Locations
 										if len(profile.Locations) > 0 {
 											fmt.Fprintf(fociSummary, "<li><strong>Locations:</strong> %s</li>\n", strings.Join(profile.Locations, ", "))
 										}
-										
+
 										// Geocoded locations
 										if len(profile.GeocodedLocation) > 0 {
 											for _, gl := range profile.GeocodedLocation {
@@ -638,7 +661,7 @@ func main() {
 												fmt.Fprintf(fociSummary, "<li><strong>Geocoded Location:</strong> %s</li>\n", info)
 											}
 										}
-										
+
 										// Companies
 										if len(profile.Companies) > 0 {
 											companyNames := make([]string, 0)
@@ -651,10 +674,10 @@ func main() {
 												fmt.Fprintf(fociSummary, "<li><strong>Company Affiliations:</strong> %s</li>\n", strings.Join(companyNames, ", "))
 											}
 										}
-										
+
 										// GitHub link
 										fmt.Fprintf(fociSummary, "<li><strong>Profile:</strong> <a href=\"https://github.com/%s\">https://github.com/%s</a></li>\n", username, username)
-										
+
 										fmt.Fprintf(fociSummary, "</ul>\n")
 										fmt.Fprintf(fociSummary, "</details>\n")
 									} else {
@@ -676,20 +699,20 @@ func main() {
 						if result.OpenSSFScorecard != nil {
 							sc := result.OpenSSFScorecard
 							fmt.Fprintf(fociSummary, "<p><strong>OpenSSF Security Score:</strong> %.1f/10</p>\n", sc.OverallScore)
-							
+
 							// Show all checks in a collapsible section with table
 							if len(sc.IndividualResults) > 0 {
 								fmt.Fprintf(fociSummary, "<details>\n")
 								fmt.Fprintf(fociSummary, "<summary><strong>View Security Assessment Details</strong> (%d checks)</summary>\n\n", len(sc.IndividualResults))
 								fmt.Fprintf(fociSummary, "<table>\n")
 								fmt.Fprintf(fociSummary, "<tr><th>Check</th><th>Score</th><th>Assessment</th></tr>\n")
-								
+
 								for _, check := range sc.IndividualResults {
 									scoreStr := fmt.Sprintf("%d/10", check.Score)
 									if check.Score == -1 {
 										scoreStr = "N/A"
 									}
-									
+
 									// Color code based on score
 									rowClass := ""
 									if check.Score >= 0 && check.Score < 5 {
@@ -697,16 +720,16 @@ func main() {
 									} else if check.Score >= 5 && check.Score < 7 {
 										rowClass = " style=\"background-color: #fff3e0;\""
 									}
-									
-									fmt.Fprintf(fociSummary, "<tr%s><td><strong>%s</strong></td><td>%s</td><td>%s</td></tr>\n", 
+
+									fmt.Fprintf(fociSummary, "<tr%s><td><strong>%s</strong></td><td>%s</td><td>%s</td></tr>\n",
 										rowClass, check.Name, scoreStr, check.Reason)
 								}
-								
+
 								fmt.Fprintf(fociSummary, "</table>\n")
 								fmt.Fprintf(fociSummary, "</details>\n")
 							}
 						}
-						
+
 						fmt.Fprintf(fociSummary, "</details>\n\n")
 					}
 				}
@@ -761,14 +784,24 @@ func main() {
 	if len(uniqueImports) > 0 {
 		fmt.Println("### Other Imports (excluding stdlib and recognized third-party)")
 		fmt.Println()
-	uniqueList := make([]string, 0, len(uniqueImports))
-	for imp := range uniqueImports {
-		uniqueList = append(uniqueList, imp)
-	}
-	sort.Strings(uniqueList)
-	for _, imp := range uniqueList {
-		fmt.Printf("- `%s`\n", imp)
+		uniqueList := make([]string, 0, len(uniqueImports))
+		for imp := range uniqueImports {
+			uniqueList = append(uniqueList, imp)
 		}
+		sort.Strings(uniqueList)
+		for _, imp := range uniqueList {
+			fmt.Printf("- `%s`\n", imp)
+		}
+	}
+
+	// FOCI threshold summary
+	if fociThreshold >= 0 && len(githubImportResults) > 0 {
+		fmt.Println("---")
+		fmt.Println()
+		fmt.Println("## FOCI Threshold Summary")
+		fmt.Println()
+		fmt.Printf("Threshold: %.0f%% change ratio\n", fociThreshold)
+		fmt.Printf("Packages above threshold: %d\n", fociPresentCount)
 	}
 }
 
@@ -783,10 +816,10 @@ func isStandardLibrary(importPath string) bool {
 	if importPath == "" {
 		return false
 	}
-	
+
 	// Get the first segment of the path
 	firstSegment := strings.Split(importPath, "/")[0]
-	
+
 	// Standard library packages don't contain dots in the first segment
 	// Examples: "fmt", "os", "net/http", "encoding/json"
 	// Non-stdlib examples: "github.com/...", "golang.org/...", "google.golang.org/..."
@@ -817,10 +850,11 @@ type PackageInfo struct {
 	Name             string
 	Package          string
 	FociPresent      bool
+	ChangeRatio      float64 // 0.0-1.0: fraction of changes from FOCI-linked contributors
 	RepositoryFoci   []GeocodedPkgLocation
 	UserFoci         []GeocodedLocation
-	UserProfiles     map[int]*UserProfile   // User ID -> Profile
-	OpenSSFScorecard *OpenSSFScorecard      // OpenSSF scorecard data
+	UserProfiles     map[int]*UserProfile // User ID -> Profile
+	OpenSSFScorecard *OpenSSFScorecard    // OpenSSF scorecard data
 	Error            string
 }
 
@@ -935,37 +969,38 @@ func queryDepsDiverAPI(client *http.Client, apiURL, token, importPath string) (*
 
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
 	}
-	
+
 	// Parse the JSON response - GetPackagesFociResponse is a map[string]*PackageFoci
 	var apiResponse map[string]*struct {
-		RepoID    int64                 `json:"repo_id"`
-		Owner     string                `json:"owner"`
-		Name      string                `json:"name"`
-		Package   string                `json:"package"`
-		Foci      bool                  `json:"foci"`
-		RepoFoci  []GeocodedPkgLocation `json:"repository_foci"`
-		UserFoci  []GeocodedLocation    `json:"user_foci"`
+		RepoID      int64                 `json:"repo_id"`
+		Owner       string                `json:"owner"`
+		Name        string                `json:"name"`
+		Package     string                `json:"package"`
+		Foci        bool                  `json:"foci"`
+		ChangeRatio float64               `json:"change_ratio"`
+		RepoFoci    []GeocodedPkgLocation `json:"repository_foci"`
+		UserFoci    []GeocodedLocation    `json:"user_foci"`
 	}
-	
+
 	if err := json.Unmarshal(body, &apiResponse); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
-	
+
 	// Extract the package info from the map (key is the package name)
 	pkgInfo, exists := apiResponse[importPath]
 	if !exists {
@@ -978,7 +1013,7 @@ func queryDepsDiverAPI(client *http.Client, apiURL, token, importPath string) (*
 			return nil, fmt.Errorf("package not found in API response")
 		}
 	}
-	
+
 	return &PackageInfo{
 		ImportPath:     importPath,
 		RepositoryID:   pkgInfo.RepoID,
@@ -986,6 +1021,7 @@ func queryDepsDiverAPI(client *http.Client, apiURL, token, importPath string) (*
 		Name:           pkgInfo.Name,
 		Package:        pkgInfo.Package,
 		FociPresent:    pkgInfo.Foci,
+		ChangeRatio:    pkgInfo.ChangeRatio,
 		RepositoryFoci: pkgInfo.RepoFoci,
 		UserFoci:       pkgInfo.UserFoci,
 		UserProfiles:   make(map[int]*UserProfile),
@@ -1003,27 +1039,27 @@ func queryUserProfile(client *http.Client, apiURL, token string, userID int) (*U
 
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
 	}
-	
+
 	var profile UserProfile
 	if err := json.Unmarshal(body, &profile); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
-	
+
 	return &profile, nil
 }
 
@@ -1038,33 +1074,31 @@ func queryOpenSSFScorecard(client *http.Client, apiURL, token string, repoID int
 
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
 	}
-	
+
 	// API returns an array of scorecards, we want the first (most recent)
 	var scorecards []OpenSSFScorecard
 	if err := json.Unmarshal(body, &scorecards); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
-	
+
 	if len(scorecards) == 0 {
 		return nil, nil
 	}
-	
+
 	return &scorecards[0], nil
 }
-
-

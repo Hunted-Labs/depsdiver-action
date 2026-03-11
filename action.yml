@@ -28,6 +28,10 @@ inputs:
     description: 'DepsDiver API token (should be set as secret)'
     required: false
     default: ''
+  foci-threshold:
+    description: 'FOCI change ratio threshold (0-100). Only packages whose change_ratio exceeds this percentage are included in the FOCI report section. Leave empty to include all packages with any FOCI data.'
+    required: false
+    default: ''
 outputs:
   report-file:
     description: 'Path to the generated report file'
@@ -39,6 +43,8 @@ outputs:
     description: 'Number of third-party packages found (GitHub, golang.org, go.opentelemetry.io, etc.)'
   stdlib-packages:
     description: 'Number of standard library packages found'
+  foci-packages:
+    description: 'Number of third-party packages with FOCI detected'
 runs:
   using: 'composite'
   steps:
@@ -54,11 +60,12 @@ runs:
         DEPSDIVER_TOKEN: ${{ inputs.depsdiver-token }}
         DEPSDIVER_API_URL: ${{ inputs.depsdiver-api-url }}
         FOCI_SUMMARY_FILE: "${{ github.workspace }}/foci-summary.txt"
+        FOCI_THRESHOLD: ${{ inputs.foci-threshold }}
       run: |
         # Run the scanner from the action directory
         cd "${{ github.action_path }}"
-        go run src/scan-imports.go "${{ github.workspace }}/${{ inputs.path }}" > "${{ github.workspace }}/${{ inputs.output-file }}" 2>&1 || true
-        
+        go run src/scan-imports.go "${{ github.workspace }}/${{ inputs.path }}" > "${{ github.workspace }}/${{ inputs.output-file }}" 2>&1
+
         # Extract summary stats from the report
         REPORT_PATH="${{ github.workspace }}/${{ inputs.output-file }}"
         if [ -f "$REPORT_PATH" ]; then
@@ -66,16 +73,19 @@ runs:
           UNIQUE=$(grep -E "^Unique other imports" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
           GITHUB=$(grep -E "^Third-party packages found:" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
           STDLIB=$(grep -E "^Standard library packages found:" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
+          FOCI=$(grep -E "^Packages with FOCI present:" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
           echo "total-imports=$TOTAL" >> $GITHUB_OUTPUT
           echo "unique-imports=$UNIQUE" >> $GITHUB_OUTPUT
           echo "github-packages=$GITHUB" >> $GITHUB_OUTPUT
           echo "stdlib-packages=$STDLIB" >> $GITHUB_OUTPUT
+          echo "foci-packages=$FOCI" >> $GITHUB_OUTPUT
           echo "report-file=${{ inputs.output-file }}" >> $GITHUB_OUTPUT
         fi
-        
+
         cat "$REPORT_PATH"
         
     - name: Upload import report
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: ${{ inputs.artifact-name }}
@@ -84,6 +94,7 @@ runs:
         if-no-files-found: warn
         
     - name: Output summary
+      if: always()
       shell: bash
       run: |
         REPORT_PATH="${{ github.workspace }}/${{ inputs.output-file }}"
@@ -100,8 +111,21 @@ runs:
           echo "<tr><td>Unique Other Imports</td><td><strong>${{ steps.scan.outputs.unique-imports }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
           echo "<tr><td>Third-Party Packages</td><td><strong>${{ steps.scan.outputs.github-packages }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
           echo "<tr><td>Standard Library Packages</td><td><strong>${{ steps.scan.outputs.stdlib-packages }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
+          echo "<tr><td>Packages with FOCI</td><td><strong>${{ steps.scan.outputs.foci-packages }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
           echo "</table>" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Add FOCI threshold result if enforcement is enabled
+          if [ -n "${{ inputs.foci-threshold }}" ]; then
+            FOCI_COUNT="${{ steps.scan.outputs.foci-packages }}"
+            THRESHOLD="${{ inputs.foci-threshold }}"
+            if [ "${FOCI_COUNT:-0}" -gt "0" ]; then
+              echo "> **FOCI threshold:** ${FOCI_COUNT} package(s) have a FOCI change ratio above ${THRESHOLD}%" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "> **FOCI threshold:** No packages had a FOCI change ratio above ${THRESHOLD}%" >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
 
           # Add FOCI summary in expandable section if available
           if [ -f "$FOCI_SUMMARY_PATH" ]; then
