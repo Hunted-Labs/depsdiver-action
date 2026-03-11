@@ -985,19 +985,20 @@ func queryDepsDiverAPI(client *http.Client, apiURL, token, importPath string) (*
 		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	// DEBUG: print raw response to see field names
-	fmt.Fprintf(os.Stderr, "DEBUG API response for %s: %s\n", importPath, string(body))
-
 	// Parse the JSON response - GetPackagesFociResponse is a map[string]*PackageFoci
 	var apiResponse map[string]*struct {
-		RepoID      int64                 `json:"repo_id"`
-		Owner       string                `json:"owner"`
-		Name        string                `json:"name"`
-		Package     string                `json:"package"`
-		Foci        bool                  `json:"foci"`
-		ChangeRatio float64               `json:"change_ratio"`
-		RepoFoci    []GeocodedPkgLocation `json:"repository_foci"`
-		UserFoci    []GeocodedLocation    `json:"user_foci"`
+		RepoID    int64                 `json:"repo_id"`
+		Owner     string                `json:"owner"`
+		Name      string                `json:"name"`
+		Package   string                `json:"package"`
+		Foci      bool                  `json:"foci"`
+		RepoFoci  []GeocodedPkgLocation `json:"repository_foci"`
+		UserFoci  []GeocodedLocation    `json:"user_foci"`
+		FociStats []struct {
+			ChangeRatio  float64  `json:"change_ratio"`
+			CountryName  *string  `json:"country_name"`
+			FociPresent  bool     `json:"foci_present"`
+		} `json:"foci_stats"`
 	}
 
 	if err := json.Unmarshal(body, &apiResponse); err != nil {
@@ -1017,6 +1018,14 @@ func queryDepsDiverAPI(client *http.Client, apiURL, token, importPath string) (*
 		}
 	}
 
+	// Sum change_ratio for all foci_present entries to get total FOCI change ratio
+	var fociChangeRatio float64
+	for _, stat := range pkgInfo.FociStats {
+		if stat.FociPresent {
+			fociChangeRatio += stat.ChangeRatio
+		}
+	}
+
 	return &PackageInfo{
 		ImportPath:     importPath,
 		RepositoryID:   pkgInfo.RepoID,
@@ -1024,7 +1033,7 @@ func queryDepsDiverAPI(client *http.Client, apiURL, token, importPath string) (*
 		Name:           pkgInfo.Name,
 		Package:        pkgInfo.Package,
 		FociPresent:    pkgInfo.Foci,
-		ChangeRatio:    pkgInfo.ChangeRatio,
+		ChangeRatio:    fociChangeRatio,
 		RepositoryFoci: pkgInfo.RepoFoci,
 		UserFoci:       pkgInfo.UserFoci,
 		UserProfiles:   make(map[int]*UserProfile),
