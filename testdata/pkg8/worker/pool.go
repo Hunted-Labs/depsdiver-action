@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/example/pipeline-runner-dev/pkg/runner"
+	_ "github.com/mailru/easyjson" // test: known FOCI package above threshold
 )
 
 type Job func(ctx context.Context) error
