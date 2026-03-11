@@ -985,6 +985,9 @@ func queryDepsDiverAPI(client *http.Client, apiURL, token, importPath string) (*
 		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
+	// DEBUG: print raw response to see field names
+	fmt.Fprintf(os.Stderr, "DEBUG API response for %s: %s\n", importPath, string(body))
+
 	// Parse the JSON response - GetPackagesFociResponse is a map[string]*PackageFoci
 	var apiResponse map[string]*struct {
 		RepoID      int64                 `json:"repo_id"`
