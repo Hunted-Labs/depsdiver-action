@@ -64,7 +64,7 @@ runs:
       run: |
         # Run the scanner from the action directory
         cd "${{ github.action_path }}"
-        go run src/scan-imports.go "${{ github.workspace }}/${{ inputs.path }}" > "${{ github.workspace }}/${{ inputs.output-file }}" 2>&1
+        go run src/scan-imports.go src/pkg_parsers.go "${{ github.workspace }}/${{ inputs.path }}" > "${{ github.workspace }}/${{ inputs.output-file }}" 2>&1
 
         # Extract summary stats from the report
         REPORT_PATH="${{ github.workspace }}/${{ inputs.output-file }}"

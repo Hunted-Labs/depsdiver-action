@@ -1,0 +1,13 @@
+source 'https://rubygems.org'
+
+gem 'rails', '~> 7.1'
+gem 'pg', '~> 1.5'
+gem 'puma', '~> 6.4'
+gem 'redis', '~> 5.0'
+# test: known FOCI package
+gem 'mail', '~> 2.8'
+
+group :development, :test do
+  gem 'rspec-rails', '~> 6.1'
+  gem 'factory_bot_rails', '~> 6.4'
+end

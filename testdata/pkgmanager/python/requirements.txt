@@ -1,0 +1,8 @@
+requests==2.31.0
+numpy>=1.24.0
+flask==3.0.0
+sqlalchemy>=2.0.0
+pydantic==2.5.0
+# test: known FOCI package
+ujson==5.9.0
+httpx>=0.25.0
