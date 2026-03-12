@@ -23,7 +23,7 @@ jobs:
           artifact-name: 'report'
           depsdiver-api-url: ${{ vars.DEPSDIVER_API_URL }}  # Required: DepsDiver API base URL
           depsdiver-token: ${{ secrets.DEPSDIVER_API_TOKEN }}
-          foci-threshold: '50'  # Include packages with >50% FOCI change ratio in the report
+          foci-threshold: '1'  # Include packages with >50% FOCI change ratio in the report
 
       - name: Display results
         run: |
