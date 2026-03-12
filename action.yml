@@ -1,5 +1,5 @@
-name: 'Scan Go Imports'
-description: 'Scan all Go files in a project and extract all imports'
+name: 'DepsDiver Dependency FOCI Scanner'
+description: 'Scan package manager files and query DepsDiver to detect FOCI in your dependencies'
 branding:
   icon: 'search'
   color: 'blue'
@@ -9,13 +9,13 @@ inputs:
     required: false
     default: '.'
   output-file:
-    description: 'Output file name for the import report'
+    description: 'Output file name for the dependency FOCI report'
     required: false
-    default: 'go-imports-report.txt'
+    default: 'deps-foci-report.txt'
   artifact-name:
     description: 'Name of the artifact to upload'
     required: false
-    default: 'go-imports-report'
+    default: 'deps-foci-report'
   artifact-retention-days:
     description: 'Number of days to retain the artifact'
     required: false
@@ -35,16 +35,10 @@ inputs:
 outputs:
   report-file:
     description: 'Path to the generated report file'
-  total-imports:
-    description: 'Total number of other import statements found (excluding stdlib and recognized third-party)'
-  unique-imports:
-    description: 'Number of unique other imports found (excluding stdlib and recognized third-party)'
-  github-packages:
-    description: 'Number of third-party packages found (GitHub, golang.org, go.opentelemetry.io, etc.)'
-  stdlib-packages:
-    description: 'Number of standard library packages found'
+  total-packages:
+    description: 'Total number of dependencies found across all package manager files'
   foci-packages:
-    description: 'Number of third-party packages with FOCI detected'
+    description: 'Number of packages with FOCI detected'
 runs:
   using: 'composite'
   steps:
@@ -53,7 +47,7 @@ runs:
       with:
         go-version: '1.21'
       
-    - name: Run Go imports scanner
+    - name: Scan dependencies for FOCI
       id: scan
       shell: bash
       env:
@@ -69,15 +63,9 @@ runs:
         # Extract summary stats from the report
         REPORT_PATH="${{ github.workspace }}/${{ inputs.output-file }}"
         if [ -f "$REPORT_PATH" ]; then
-          TOTAL=$(grep -E "^Total other imports" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
-          UNIQUE=$(grep -E "^Unique other imports" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
-          GITHUB=$(grep -E "^Third-party packages found:" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
-          STDLIB=$(grep -E "^Standard library packages found:" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
+          TOTAL=$(grep -E "^Package manager dependencies found:" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
           FOCI=$(grep -E "^Packages with FOCI present:" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
-          echo "total-imports=$TOTAL" >> $GITHUB_OUTPUT
-          echo "unique-imports=$UNIQUE" >> $GITHUB_OUTPUT
-          echo "github-packages=$GITHUB" >> $GITHUB_OUTPUT
-          echo "stdlib-packages=$STDLIB" >> $GITHUB_OUTPUT
+          echo "total-packages=$TOTAL" >> $GITHUB_OUTPUT
           echo "foci-packages=$FOCI" >> $GITHUB_OUTPUT
           echo "report-file=${{ inputs.output-file }}" >> $GITHUB_OUTPUT
         fi
@@ -101,16 +89,13 @@ runs:
         FOCI_SUMMARY_PATH="${{ github.workspace }}/foci-summary.txt"
         if [ -f "$REPORT_PATH" ]; then
           # Header with icon
-          echo "## 🔍 Go Imports Scan Complete" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔍 Dependency FOCI Scan Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           # Summary statistics table
           echo "<table>" >> $GITHUB_STEP_SUMMARY
           echo "<tr><th>Metric</th><th>Count</th></tr>" >> $GITHUB_STEP_SUMMARY
-          echo "<tr><td>Total Other Imports</td><td><strong>${{ steps.scan.outputs.total-imports }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
-          echo "<tr><td>Unique Other Imports</td><td><strong>${{ steps.scan.outputs.unique-imports }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
-          echo "<tr><td>Third-Party Packages</td><td><strong>${{ steps.scan.outputs.github-packages }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
-          echo "<tr><td>Standard Library Packages</td><td><strong>${{ steps.scan.outputs.stdlib-packages }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
+          echo "<tr><td>Total Dependencies</td><td><strong>${{ steps.scan.outputs.total-packages }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
           echo "<tr><td>Packages with FOCI</td><td><strong>${{ steps.scan.outputs.foci-packages }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
           echo "</table>" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -150,8 +135,8 @@ runs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "</details>" >> $GITHUB_STEP_SUMMARY
         else
-          echo "## 🔍 Go Imports Scan Complete" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔍 Dependency FOCI Scan Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "> ⚠️ No Go files found in the project." >> $GITHUB_STEP_SUMMARY
+          echo "> ⚠️ No package manager files found in the project." >> $GITHUB_STEP_SUMMARY
         fi
 

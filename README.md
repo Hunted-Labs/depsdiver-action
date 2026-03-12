@@ -1,24 +1,36 @@
-# Scan Go Imports Action
+# DepsDiver Dependency FOCI Scanner
 
-A GitHub Action that scans all Go files in your project and extracts all import statements, generating a comprehensive report.
-
+A GitHub Action that scans package manager files in your repository and queries the [DepsDiver](https://huntedlabs.com) API to detect Foreign Ownership, Control, or Influence (FOCI) in your dependencies.
 
 ## Features
 
-- 🔍 Recursively scans all `.go` files in your project   
-- 📊 Generates a detailed markdown report with imports organized by file
-- 📈 Provides summary statistics (total imports, unique imports)  
-- 🎯 Automatically skips `vendor/`, `.git/`, and `node_modules/` directories
-- 📦 Uploads the report as a downloadable artifact
-- ✨ Displays a summary in the GitHub Actions UI
-- 🔒 Integrates with DepsDiver API to fetch threat intelligence data for GitHub packages
+- Scans package manager files across all major ecosystems
+- Reports FOCI presence and geocoded contributor locations per package
+- Enriches results with contributor profiles (GitHub login, email, company affiliations)
+- Integrates OpenSSF Scorecard scores for each dependency
+- Generates a detailed markdown report and GitHub Actions step summary
+- Uploads the report as a downloadable artifact
+- Automatically skips `vendor/`, `.git/`, `node_modules/`, `target/`, `build/`, and `dist/` directories
+
+## Supported Ecosystems
+
+| Ecosystem | Files Scanned |
+|-----------|---------------|
+| Go | `go.mod` |
+| npm | `package.json` |
+| PyPI | `requirements.txt`, `pyproject.toml`, `Pipfile` |
+| Cargo (Rust) | `Cargo.toml` |
+| RubyGems | `Gemfile` |
+| Maven | `pom.xml` |
+| NuGet (.NET) | `*.csproj` |
+| Gradle | `build.gradle`, `build.gradle.kts`, `libs.versions.toml` |
 
 ## Usage
 
 ### Basic Usage
 
 ```yaml
-name: Scan Go Imports
+name: Scan Dependencies for FOCI
 
 on:
   push:
@@ -27,19 +39,22 @@ on:
     branches: [ main ]
 
 jobs:
-  scan-imports:
+  foci-scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Scan Go imports
-        uses: your-username/hl-action@v1
+
+      - name: Scan dependencies
+        uses: your-org/depsdiver-action@v1
+        with:
+          depsdiver-api-url: 'https://your-depsdiver-instance.com/api'
+          depsdiver-token: ${{ secrets.DEPSDIVER_TOKEN }}
 ```
 
-### Advanced Usage with DepsDiver API
+### Advanced Usage
 
 ```yaml
-name: Scan Go Imports
+name: Scan Dependencies for FOCI
 
 on:
   push:
@@ -47,32 +62,31 @@ on:
   workflow_dispatch:
 
 jobs:
-  scan-imports:
+  foci-scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Scan Go imports
+
+      - name: Scan dependencies
         id: scan
-        uses: your-username/hl-action@v1
+        uses: your-org/depsdiver-action@v1
         with:
-          path: './src'                    # Optional: directory to scan (default: '.')
-          output-file: 'imports.txt'       # Optional: output file name (default: 'go-imports-report.txt')
-          artifact-name: 'import-report'   # Optional: artifact name (default: 'go-imports-report')
-          artifact-retention-days: '7'     # Optional: artifact retention days (default: '30')
-          depsdiver-api-url: 'https://your-api-url.com'  # Required: DepsDiver API base URL
-          depsdiver-token: ${{ secrets.DEPSDIVER_API_TOKEN }}     # Required: DepsDiver API token (recommended to use secret)
-      
-      - name: Use scan results
+          path: '.'                              # Directory to scan (default: '.')
+          output-file: 'foci-report.txt'         # Report file name (default: 'deps-foci-report.txt')
+          artifact-name: 'foci-report'           # Artifact name (default: 'deps-foci-report')
+          artifact-retention-days: '7'           # Artifact retention (default: '30')
+          depsdiver-api-url: 'https://your-depsdiver-instance.com/api'
+          depsdiver-token: ${{ secrets.DEPSDIVER_TOKEN }}
+          foci-threshold: '10'                   # Only flag packages with >10% FOCI change ratio
+
+      - name: Fail if FOCI detected
+        if: steps.scan.outputs.foci-packages > 0
         run: |
-          echo "Total imports: ${{ steps.scan.outputs.total-imports }}"
-          echo "Unique imports: ${{ steps.scan.outputs.unique-imports }}"
-          echo "Report file: ${{ steps.scan.outputs.report-file }}"
+          echo "FOCI detected in ${{ steps.scan.outputs.foci-packages }} package(s)"
+          exit 1
 ```
 
-### Setting Up DepsDiver API Token
-
-#### Option 1: Using GitHub Secrets (Recommended)
+### Setting Up the DepsDiver Token
 
 1. Go to your repository on GitHub
 2. Navigate to **Settings** → **Secrets and variables** → **Actions**
@@ -81,125 +95,78 @@ jobs:
 5. Value: Your DepsDiver API token
 6. Click **Add secret**
 
-Then in your workflow, the token will be automatically used if you don't specify `depsdiver-token` input:
-
-```yaml
-- name: Scan Go imports
-  uses: your-username/hl-action@v1
-  with:
-    depsdiver-api-url: 'https://your-api-url.com'
-    # Token is automatically pulled from secrets.DEPSDIVER_TOKEN
-```
-
-#### Option 2: Explicitly Pass Token
-
-You can also explicitly pass the token as an input:
-
-```yaml
-- name: Scan Go imports
-  uses: your-username/hl-action@v1
-  with:
-    depsdiver-api-url: 'https://your-api-url.com'
-    depsdiver-token: ${{ secrets.DEPSDIVER_API_TOKEN }}
-```
-
-#### Option 3: Organization/Repository Secrets
-
-For organization-wide or repository-level secrets:
-- **Organization secrets**: Settings → Secrets and variables → Actions → New organization secret
-- **Repository secrets**: Settings → Secrets and variables → Actions → New repository secret
-
-The action will automatically use `secrets.DEPSDIVER_TOKEN` if available, even if not explicitly passed.
+For organization-wide access, use an organization secret instead.
 
 ## Inputs
 
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
 | `path` | Directory path to scan | No | `.` |
-| `output-file` | Output file name for the import report | No | `go-imports-report.txt` |
-| `artifact-name` | Name of the artifact to upload | No | `go-imports-report` |
-| `artifact-retention-days` | Number of days to retain the artifact | No | `30` |
-| `depsdiver-api-url` | DepsDiver API base URL (e.g., `https://api.example.com`) | Yes* | `https://api.example.com` |
-| `depsdiver-token` | DepsDiver API token (should be set as secret) | Yes* | (uses `secrets.DEPSDIVER_API_TOKEN` if available) |
+| `output-file` | Output file name for the report | No | `deps-foci-report.txt` |
+| `artifact-name` | Name of the uploaded artifact | No | `deps-foci-report` |
+| `artifact-retention-days` | Days to retain the artifact | No | `30` |
+| `depsdiver-api-url` | DepsDiver API base URL | No* | — |
+| `depsdiver-token` | DepsDiver API token | No* | (uses `secrets.DEPSDIVER_TOKEN`) |
+| `foci-threshold` | FOCI change ratio threshold (0–100%). Only packages exceeding this are flagged. Leave empty to flag all packages with any FOCI data. | No | — |
 
-\* Required if you want to query threat intelligence data for GitHub packages. If not provided, the action will still scan imports but won't query the API.
+\* Without `depsdiver-api-url` and `depsdiver-token` the action will discover and list dependencies but won't query for FOCI data.
 
 ## Outputs
 
 | Output | Description |
 |--------|-------------|
 | `report-file` | Path to the generated report file |
-| `total-imports` | Total number of import statements found |
-| `unique-imports` | Number of unique imports found |
+| `foci-packages` | Number of packages with FOCI detected |
+| `total-packages` | Total number of dependencies found across all package manager files |
 
 ## Report Format
 
 The generated report includes:
 
-1. **Header**: Generation timestamp
-2. **File-by-file listing**: All imports organized by source file (excluding standard library and GitHub packages)
-3. **Summary**: Total and unique import counts, plus GitHub packages and standard library counts
-4. **GitHub Packages section**: List of all GitHub packages with threat intelligence data (if API is configured)
-5. **Third-party imports list**: Alphabetically sorted list of non-stdlib, non-GitHub imports
+1. **Summary** — total dependency count and FOCI statistics
+2. **Detailed FOCI Analysis** — per-package breakdown for any package with FOCI detected, including:
+   - Link to the full DepsDiver report
+   - FOCI status and change ratio
+   - Repository FOCI locations (country, organization)
+   - Contributor FOCI analysis with GitHub profile details
+   - OpenSSF Scorecard score and per-check breakdown
+3. **Package Manager Dependencies** — full list of all discovered packages grouped by ecosystem, annotated with FOCI status if queried
 
-Example report:
+Example summary section:
 
 ```markdown
-# Go Imports Report
-(Standard library and GitHub packages filtered out)
-Generated: 2024-01-15 10:30:45 UTC
-
-## File: utils/helper.go
-
-- `golang.org/x/crypto`
-
----
+# Dependency FOCI Report
+Generated: 2026-03-12 10:30:45 UTC
 
 ## Summary
 
-Total third-party imports (excluding stdlib and GitHub): 1
-Unique third-party imports: 1
-GitHub packages found: 3
-Standard library packages found: 5
+Package manager dependencies found: 42
 
-### GitHub Packages
+### FOCI Analysis
 
-- `github.com/example/easygo/pkg/helpers`
-  - Repository ID: 12345678
-  - Repository: https://github.com/example/easygo
-  - Geocoded Locations: 2 found
-    - United States (US)
-    - Canada (CA)
+Packages with FOCI present: 2
+Total repository FOCI locations: 3
+Total contributors with FOCI: 1
 
-- `github.com/mailru/easyjson`
-  - Repository ID: 87654321
-  - Repository: https://github.com/mailru/easyjson
-  - Geocoded Locations: 1 found
-    - Russia (RU)
-
-### All Unique Third-Party Imports (excluding stdlib and GitHub)
-
-- `golang.org/x/crypto`
+**OpenSSF Scorecard Summary:**
+Packages with OpenSSF Scorecard: 38
+Average OpenSSF Score: 6.4/10
 ```
 
 ## Publishing
 
 To publish this action:
 
-1. Create a new repository on GitHub
-2. Push this code to the repository
+1. Create a repository on GitHub
+2. Push this code
 3. Create a release tag (e.g., `v1`, `v1.0.0`)
-4. Use the action in other repositories with:
+4. Reference it in other repos with:
    ```yaml
-   uses: your-username/hl-action@v1
+   uses: your-org/depsdiver-action@v1
    ```
 
-For versioning, it's recommended to use:
-- `@v1` - points to the latest v1.x.x release
-- `@v1.0.0` - points to a specific version
-- `@main` - points to the latest commit on main branch (not recommended for production)
+Use `@v1` for the latest v1.x release, `@v1.0.0` for a pinned version, or `@main` for cutting-edge (not recommended for production).
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details
-
+MIT License — see [LICENSE](LICENSE) for details.
