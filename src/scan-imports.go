@@ -46,25 +46,57 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Querying DepsDiver API for %d packages...\n", len(pkgManagerDeps))
 		fetchedUserProfiles := make(map[int]*UserProfile)
 
-		for _, dep := range pkgManagerDeps {
-			key := dep.Ecosystem + ":" + dep.Name
-			info, err := queryDepsDiverAPI(apiClient, depsDiverAPIURL, depsDiverToken, dep.Name, dep.Ecosystem)
+		// Bulk query in chunks of 20
+		const chunkSize = 20
+		for i := 0; i < len(pkgManagerDeps); i += chunkSize {
+			end := i + chunkSize
+			if end > len(pkgManagerDeps) {
+				end = len(pkgManagerDeps)
+			}
+			chunk := pkgManagerDeps[i:end]
+
+			bulkResults, err := queryDepsDiverAPIBulk(apiClient, depsDiverAPIURL, depsDiverToken, chunk)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Failed to query API for %s: %v\n", dep.Name, err)
-				pkgManagerResults[key] = &PackageInfo{ImportPath: dep.Name, Error: err.Error()}
-			} else {
-				pkgManagerResults[key] = info
-				if info.RepositoryID > 0 {
-					scorecard, err := queryOpenSSFScorecard(apiClient, depsDiverAPIURL, depsDiverToken, info.RepositoryID)
+				fmt.Fprintf(os.Stderr, "Warning: Bulk query failed, falling back to individual: %v\n", err)
+				bulkResults = map[string]*PackageInfo{}
+			}
+
+			// Merge bulk results
+			for _, dep := range chunk {
+				key := dep.Ecosystem + ":" + dep.Name
+				normalizedName := strings.ToLower(dep.Name)
+				if info, ok := bulkResults[normalizedName]; ok {
+					pkgManagerResults[key] = info
+				} else if info, ok := bulkResults[dep.Name]; ok {
+					pkgManagerResults[key] = info
+				} else {
+					// fall back to individual call
+					info, err := queryDepsDiverAPI(apiClient, depsDiverAPIURL, depsDiverToken, dep.Name, dep.Ecosystem)
 					if err != nil {
-						fmt.Fprintf(os.Stderr, "Warning: Failed to fetch OpenSSF scorecard for %s: %v\n", dep.Name, err)
-					} else if scorecard != nil {
-						info.OpenSSFScorecard = scorecard
+						fmt.Fprintf(os.Stderr, "Warning: Failed to query API for %s: %v\n", dep.Name, err)
+						pkgManagerResults[key] = &PackageInfo{ImportPath: dep.Name, Error: err.Error()}
+					} else {
+						pkgManagerResults[key] = info
 					}
-					time.Sleep(50 * time.Millisecond)
+					time.Sleep(100 * time.Millisecond)
 				}
 			}
-			time.Sleep(100 * time.Millisecond)
+		}
+
+		// Get OpenSSF scorecards
+		for _, dep := range pkgManagerDeps {
+			key := dep.Ecosystem + ":" + dep.Name
+			info, ok := pkgManagerResults[key]
+			if !ok || info.Error != "" || info.RepositoryID == 0 {
+				continue
+			}
+			scorecard, err := queryOpenSSFScorecard(apiClient, depsDiverAPIURL, depsDiverToken, info.RepositoryID)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: Failed to fetch OpenSSF scorecard for %s: %v\n", dep.Name, err)
+			} else if scorecard != nil {
+				info.OpenSSFScorecard = scorecard
+			}
+			time.Sleep(50 * time.Millisecond)
 		}
 
 		// Fetch user profiles for all unique user IDs
@@ -739,6 +771,93 @@ type OpenSSFIndividualCheck struct {
 	Score            int      `json:"Score"`
 	Reason           string   `json:"Reason"`
 	Details          []string `json:"Details"`
+}
+
+// input shape for the bulk endpoint
+type packageRequest struct {
+	PackageName   string `json:"packageName"`
+	PackageSystem string `json:"packageSystem"`
+}
+
+// queries POST /foci/present with up to ~20 packages at once
+// Returns a map keyed by package name
+func queryDepsDiverAPIBulk(client *http.Client, apiURL, token string, deps []PackageManagerDep) (map[string]*PackageInfo, error) {
+	body := make(map[string]packageRequest, len(deps))
+	for i, dep := range deps {
+		body[fmt.Sprintf("pkg_%d", i)] = packageRequest{
+			PackageName:   dep.Name,
+			PackageSystem: dep.Ecosystem,
+		}
+	}
+
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal bulk request: %w", err)
+	}
+
+	apiEndpoint := fmt.Sprintf("%s/foci/present", strings.TrimSuffix(apiURL, "/"))
+	req, err := http.NewRequest("POST", apiEndpoint, strings.NewReader(string(bodyBytes)))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var apiResponse map[string]*struct {
+		RepoID    int64                 `json:"repo_id"`
+		Owner     string                `json:"owner"`
+		Name      string                `json:"name"`
+		Package   string                `json:"package"`
+		Foci      bool                  `json:"foci"`
+		RepoFoci  []GeocodedPkgLocation `json:"repository_foci"`
+		UserFoci  []GeocodedLocation    `json:"user_foci"`
+		FociStats []struct {
+			ChangeRatio float64 `json:"change_ratio"`
+			CountryName *string `json:"country_name"`
+			FociPresent bool    `json:"foci_present"`
+		} `json:"foci_stats"`
+	}
+	if err := json.Unmarshal(respBody, &apiResponse); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	results := make(map[string]*PackageInfo, len(apiResponse))
+	for key, pkgInfo := range apiResponse {
+		var fociChangeRatio float64
+		for _, stat := range pkgInfo.FociStats {
+			if stat.FociPresent {
+				fociChangeRatio += stat.ChangeRatio
+			}
+		}
+		results[key] = &PackageInfo{
+			ImportPath:     key,
+			RepositoryID:   pkgInfo.RepoID,
+			Owner:          pkgInfo.Owner,
+			Name:           pkgInfo.Name,
+			Package:        pkgInfo.Package,
+			FociPresent:    pkgInfo.Foci,
+			ChangeRatio:    fociChangeRatio,
+			RepositoryFoci: pkgInfo.RepoFoci,
+			UserFoci:       pkgInfo.UserFoci,
+			UserProfiles:   make(map[int]*UserProfile),
+		}
+	}
+	return results, nil
 }
 
 func queryDepsDiverAPI(client *http.Client, apiURL, token, importPath, ecosystem string) (*PackageInfo, error) {
