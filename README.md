@@ -45,9 +45,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Scan dependencies
-        uses: your-org/depsdiver-action@v1
+        uses: Hunted-Labs/depsdiver-action@v1
         with:
-          depsdiver-api-url: 'https://your-depsdiver-instance.com/api'
+          depsdiver-api-url: 'https://depsdiver.com/api'
           depsdiver-token: ${{ secrets.DEPSDIVER_TOKEN }}
 ```
 
@@ -69,13 +69,13 @@ jobs:
 
       - name: Scan dependencies
         id: scan
-        uses: your-org/depsdiver-action@v1
+        uses: Hunted-Labs/depsdiver-action@v1
         with:
           path: '.'                              # Directory to scan (default: '.')
           output-file: 'foci-report.txt'         # Report file name (default: 'deps-foci-report.txt')
           artifact-name: 'foci-report'           # Artifact name (default: 'deps-foci-report')
           artifact-retention-days: '7'           # Artifact retention (default: '30')
-          depsdiver-api-url: 'https://your-depsdiver-instance.com/api'
+          depsdiver-api-url: 'https://depsdiver.com/api'
           depsdiver-token: ${{ secrets.DEPSDIVER_TOKEN }}
           foci-threshold: '10'                   # Only flag packages with >10% FOCI change ratio
 
@@ -153,19 +153,9 @@ Packages with OpenSSF Scorecard: 38
 Average OpenSSF Score: 6.4/10
 ```
 
-## Publishing
+## Versioning
 
-To publish this action:
-
-1. Create a repository on GitHub
-2. Push this code
-3. Create a release tag (e.g., `v1`, `v1.0.0`)
-4. Reference it in other repos with:
-   ```yaml
-   uses: your-org/depsdiver-action@v1
-   ```
-
-Use `@v1` for the latest v1.x release, `@v1.0.0` for a pinned version, or `@main` for cutting-edge (not recommended for production).
+Use `@v1` for the latest v1.x release, `@v1.0.0` for a pinned version, or `@main` for the latest (not recommended for production).
 
 ## License
 
