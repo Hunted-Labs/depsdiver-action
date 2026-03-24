@@ -43,7 +43,7 @@ runs:
   using: 'composite'
   steps:
     - name: Set up Go
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@v6
       with:
         go-version: '1.21'
       
@@ -64,7 +64,7 @@ runs:
         REPORT_PATH="${{ github.workspace }}/${{ inputs.output-file }}"
         if [ -f "$REPORT_PATH" ]; then
           TOTAL=$(grep -E "^Package manager dependencies found:" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
-          FOCI=$(grep -E "^Packages with FOCI present:" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
+          FOCI=$(grep -E "^FOCI detected:" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
           echo "total-packages=$TOTAL" >> $GITHUB_OUTPUT
           echo "foci-packages=$FOCI" >> $GITHUB_OUTPUT
           echo "report-file=${{ inputs.output-file }}" >> $GITHUB_OUTPUT
@@ -74,7 +74,7 @@ runs:
         
     - name: Upload import report
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: ${{ inputs.artifact-name }}
         path: ${{ github.workspace }}/${{ inputs.output-file }}
@@ -95,7 +95,7 @@ runs:
           # Summary statistics table
           echo "<table>" >> $GITHUB_STEP_SUMMARY
           echo "<tr><th>Metric</th><th>Count</th></tr>" >> $GITHUB_STEP_SUMMARY
-          echo "<tr><td>Total Dependencies</td><td><strong>${{ steps.scan.outputs.total-packages }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
+          echo "<tr><td>Total Packages</td><td><strong>${{ steps.scan.outputs.total-packages }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
           echo "<tr><td>Packages with FOCI</td><td><strong>${{ steps.scan.outputs.foci-packages }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
           echo "</table>" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
