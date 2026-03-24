@@ -1,4 +1,6 @@
-# Go
+# Go binaries
+/scan-imports
+/scan-deps
 *.exe
 *.exe~
 *.dll
