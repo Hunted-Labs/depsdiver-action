@@ -10,7 +10,7 @@ A GitHub Action that scans package manager files in your repository and queries 
 - Integrates OpenSSF Scorecard scores for each dependency
 - Generates a detailed markdown report and GitHub Actions step summary
 - Uploads the report as a downloadable artifact
-- Automatically skips `vendor/`, `.git/`, `node_modules/`, `target/`, `build/`, and `dist/` directories
+- Automatically skips `vendor/`, `.git/`, `node_modules/`, `target/`, `build/`, `dist/`, `.idea/`, and `__pycache__/` directories
 
 ## Supported Ecosystems
 
@@ -22,7 +22,7 @@ A GitHub Action that scans package manager files in your repository and queries 
 | Cargo (Rust) | `Cargo.toml` |
 | RubyGems | `Gemfile` |
 | Maven | `pom.xml` |
-| NuGet (.NET) | `*.csproj` |
+| NuGet (.NET) | `*.csproj`, `*.vbproj`, `*.fsproj` |
 | Gradle | `build.gradle`, `build.gradle.kts`, `libs.versions.toml` |
 
 ## Usage
