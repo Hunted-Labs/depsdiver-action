@@ -41,7 +41,7 @@ jobs:
   foci-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Scan dependencies
         uses: Hunted-Labs/depsdiver-action@v1
@@ -64,7 +64,7 @@ jobs:
   foci-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Scan dependencies
         id: scan
