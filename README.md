@@ -123,7 +123,10 @@ For organization-wide access, use an organization secret instead.
 After a workflow run completes:
 
 1. Click the workflow run in the **Actions** tab of your repository
-2. Select the **Summary** tab at the top of the run page. The FOCI analysis appears here inline, with expandable details for each flagged package
+2. Select the **Summary** tab at the top of the run page — the FOCI analysis appears here inline with the following expandable sections:
+   - **📂 Files Scanned** — every package manager file found and how many packages came from each
+   - **📦 All Packages Scanned** — every package checked, grouped by ecosystem, with a status icon next to each: `✅` passed, `⚠️` FOCI detected, `—` not in DepsDiver database, `❌` API error
+   - **🌍 FOCI Analysis Results** — detailed breakdown for each flagged package with countries of concern, contribution percentages, and a link to the full report on Hunted Labs
 3. Scroll to **Artifacts** at the bottom of the Summary page to download the full report file
 
 ## Status Badge
@@ -162,13 +165,20 @@ Generated: 2026-03-12 10:30:45 UTC
 
 ## Summary
 
+### Files Scanned
+
+- `go.mod` (12 packages)
+- `package.json` (23 packages)
+- `requirements.txt` (7 packages)
+
 Package manager dependencies found: 42
 
 ### FOCI Analysis
 
-Packages with FOCI present: 2
+Passed: 32
+FOCI detected: 2
+Not in DepsDiver database: 8
 Total repository FOCI locations: 3
-Packages not found in DepsDiver database: 8
 ```
 
 ## Versioning

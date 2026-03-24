@@ -127,30 +127,118 @@ func main() {
 		tallyResult(result)
 	}
 
+	// Build files-scanned
+	fileDepCount := make(map[string]int)
+	var fileOrder []string
+	seenFiles := make(map[string]bool)
+	for _, dep := range pkgManagerDeps {
+		if !seenFiles[dep.SourceFile] {
+			seenFiles[dep.SourceFile] = true
+			fileOrder = append(fileOrder, dep.SourceFile)
+		}
+		fileDepCount[dep.SourceFile]++
+	}
+
+	passedCount := len(pkgManagerResults) - fociPresentCount - packagesNotFound - packagesWithErrors
+
 	// Generate report
 	fmt.Println("# Dependency FOCI Report")
 	fmt.Printf("Generated: %s\n\n", getCurrentTime())
 
 	fmt.Println("## Summary")
 	fmt.Println()
+
+	// Files scanned
+	if len(fileOrder) > 0 {
+		fmt.Println("### Files Scanned")
+		fmt.Println()
+		for _, f := range fileOrder {
+			fmt.Printf("- `%s` (%d packages)\n", f, fileDepCount[f])
+		}
+		fmt.Println()
+	}
+
 	fmt.Printf("Package manager dependencies found: %d\n", len(pkgManagerDeps))
 	fmt.Println()
 
 	if len(pkgManagerResults) > 0 {
 		fmt.Println("### FOCI Analysis")
 		fmt.Println()
-		fmt.Printf("Packages with FOCI present: %d\n", fociPresentCount)
-		fmt.Printf("Total repository FOCI locations: %d\n", totalRepoFoci)
+		fmt.Printf("Passed: %d\n", passedCount)
+		fmt.Printf("FOCI detected: %d\n", fociPresentCount)
 		if packagesNotFound > 0 {
-			fmt.Printf("Packages not found in DepsDiver database: %d\n", packagesNotFound)
+			fmt.Printf("Not in DepsDiver database: %d\n", packagesNotFound)
 		}
 		if packagesWithErrors > 0 {
-			fmt.Printf("Packages with API errors: %d\n", packagesWithErrors)
+			fmt.Printf("API errors: %d\n", packagesWithErrors)
 		}
+		fmt.Printf("Total repository FOCI locations: %d\n", totalRepoFoci)
 		fmt.Println()
 
 		if fociSummary != nil {
 			fmt.Fprintf(fociSummary, "## Detailed FOCI Analysis\n\n")
+
+			// Files scanned table
+			if len(fileOrder) > 0 {
+				fmt.Fprintf(fociSummary, "<details>\n")
+				fmt.Fprintf(fociSummary, "<summary><strong>📂 Files Scanned (%d files, %d packages)</strong></summary>\n\n", len(fileOrder), len(pkgManagerDeps))
+				fmt.Fprintf(fociSummary, "<table>\n<tr><th>File</th><th>Packages</th></tr>\n")
+				for _, f := range fileOrder {
+					fmt.Fprintf(fociSummary, "<tr><td><code>%s</code></td><td>%d</td></tr>\n", f, fileDepCount[f])
+				}
+				fmt.Fprintf(fociSummary, "</table>\n\n")
+				fmt.Fprintf(fociSummary, "</details>\n\n")
+			}
+
+			// Results summary line
+			fmt.Fprintf(fociSummary, "**Results:** %d passed · %d FOCI detected", passedCount, fociPresentCount)
+			if packagesNotFound > 0 {
+				fmt.Fprintf(fociSummary, " · %d not in DepsDiver DB", packagesNotFound)
+			}
+			fmt.Fprintf(fociSummary, "\n\n")
+
+			// All packages scanned, grouped by ecosystem
+			byEcoSummary := make(map[string][]PackageManagerDep)
+			var ecoOrderSummary []string
+			seenEcoSummary := make(map[string]bool)
+			for _, dep := range pkgManagerDeps {
+				if !seenEcoSummary[dep.Ecosystem] {
+					seenEcoSummary[dep.Ecosystem] = true
+					ecoOrderSummary = append(ecoOrderSummary, dep.Ecosystem)
+				}
+				byEcoSummary[dep.Ecosystem] = append(byEcoSummary[dep.Ecosystem], dep)
+			}
+			fmt.Fprintf(fociSummary, "<details>\n")
+			fmt.Fprintf(fociSummary, "<summary><strong>All Packages Scanned (%d)</strong></summary>\n\n", len(pkgManagerDeps))
+			for _, eco := range ecoOrderSummary {
+				fmt.Fprintf(fociSummary, "<p><strong>%s</strong></p>\n<ul>\n", eco)
+				for _, dep := range byEcoSummary[eco] {
+					key := dep.Ecosystem + ":" + dep.Name
+					status := "✅"
+					if result, exists := pkgManagerResults[key]; exists && result.Error != "" {
+						if isNotFound(result.Error) {
+							status = "—"
+						} else {
+							status = "❌"
+						}
+					} else if result, exists := pkgManagerResults[key]; exists {
+						hasFoci := false
+						if fociThreshold >= 0 {
+							hasFoci = result.ChangeRatio*100 > fociThreshold
+						} else {
+							hasFoci = result.FociPresent
+						}
+						if hasFoci {
+							status = "⚠️"
+						}
+					} else {
+						status = "—"
+					}
+					fmt.Fprintf(fociSummary, "<li>%s <code>%s</code></li>\n", status, dep.Name)
+				}
+				fmt.Fprintf(fociSummary, "</ul>\n")
+			}
+			fmt.Fprintf(fociSummary, "</details>\n\n")
 		}
 
 		for _, dep := range pkgManagerDeps {
