@@ -161,6 +161,64 @@ func main() {
 	fmt.Printf("Package manager dependencies found: %d\n", len(pkgManagerDeps))
 	fmt.Println()
 
+	// Always write files scanned + all packages to step summary, regardless of API results
+	if fociSummary != nil && len(pkgManagerDeps) > 0 {
+		// Files scanned table
+		if len(fileOrder) > 0 {
+			fmt.Fprintf(fociSummary, "<details>\n")
+			fmt.Fprintf(fociSummary, "<summary><strong>📂 Files Scanned (%d files, %d packages)</strong></summary>\n\n", len(fileOrder), len(pkgManagerDeps))
+			fmt.Fprintf(fociSummary, "<table>\n<tr><th>File</th><th>Packages</th></tr>\n")
+			for _, f := range fileOrder {
+				fmt.Fprintf(fociSummary, "<tr><td><code>%s</code></td><td>%d</td></tr>\n", f, fileDepCount[f])
+			}
+			fmt.Fprintf(fociSummary, "</table>\n\n")
+			fmt.Fprintf(fociSummary, "</details>\n\n")
+		}
+
+		// All packages scanned, grouped by ecosystem
+		byEcoSummary := make(map[string][]PackageManagerDep)
+		var ecoOrderSummary []string
+		seenEcoSummary := make(map[string]bool)
+		for _, dep := range pkgManagerDeps {
+			if !seenEcoSummary[dep.Ecosystem] {
+				seenEcoSummary[dep.Ecosystem] = true
+				ecoOrderSummary = append(ecoOrderSummary, dep.Ecosystem)
+			}
+			byEcoSummary[dep.Ecosystem] = append(byEcoSummary[dep.Ecosystem], dep)
+		}
+		fmt.Fprintf(fociSummary, "<details>\n")
+		fmt.Fprintf(fociSummary, "<summary><strong>📦 All Packages Scanned (%d)</strong></summary>\n\n", len(pkgManagerDeps))
+		for _, eco := range ecoOrderSummary {
+			fmt.Fprintf(fociSummary, "<p><strong>%s</strong></p>\n<ul>\n", eco)
+			for _, dep := range byEcoSummary[eco] {
+				key := dep.Ecosystem + ":" + dep.Name
+				status := "—"
+				if result, exists := pkgManagerResults[key]; exists {
+					if result.Error != "" {
+						if !isNotFound(result.Error) {
+							status = "❌"
+						}
+					} else {
+						hasFoci := false
+						if fociThreshold >= 0 {
+							hasFoci = result.ChangeRatio*100 > fociThreshold
+						} else {
+							hasFoci = result.FociPresent
+						}
+						if hasFoci {
+							status = "⚠️"
+						} else {
+							status = "✅"
+						}
+					}
+				}
+				fmt.Fprintf(fociSummary, "<li>%s <code>%s</code></li>\n", status, dep.Name)
+			}
+			fmt.Fprintf(fociSummary, "</ul>\n")
+		}
+		fmt.Fprintf(fociSummary, "</details>\n\n")
+	}
+
 	if len(pkgManagerResults) > 0 {
 		fmt.Println("### FOCI Analysis")
 		fmt.Println()
@@ -176,69 +234,11 @@ func main() {
 		fmt.Println()
 
 		if fociSummary != nil {
-			fmt.Fprintf(fociSummary, "## Detailed FOCI Analysis\n\n")
-
-			// Files scanned table
-			if len(fileOrder) > 0 {
-				fmt.Fprintf(fociSummary, "<details>\n")
-				fmt.Fprintf(fociSummary, "<summary><strong>📂 Files Scanned (%d files, %d packages)</strong></summary>\n\n", len(fileOrder), len(pkgManagerDeps))
-				fmt.Fprintf(fociSummary, "<table>\n<tr><th>File</th><th>Packages</th></tr>\n")
-				for _, f := range fileOrder {
-					fmt.Fprintf(fociSummary, "<tr><td><code>%s</code></td><td>%d</td></tr>\n", f, fileDepCount[f])
-				}
-				fmt.Fprintf(fociSummary, "</table>\n\n")
-				fmt.Fprintf(fociSummary, "</details>\n\n")
-			}
-
-			// Results summary line
 			fmt.Fprintf(fociSummary, "**Results:** %d passed · %d FOCI detected", passedCount, fociPresentCount)
 			if packagesNotFound > 0 {
 				fmt.Fprintf(fociSummary, " · %d not in DepsDiver DB", packagesNotFound)
 			}
 			fmt.Fprintf(fociSummary, "\n\n")
-
-			// All packages scanned, grouped by ecosystem
-			byEcoSummary := make(map[string][]PackageManagerDep)
-			var ecoOrderSummary []string
-			seenEcoSummary := make(map[string]bool)
-			for _, dep := range pkgManagerDeps {
-				if !seenEcoSummary[dep.Ecosystem] {
-					seenEcoSummary[dep.Ecosystem] = true
-					ecoOrderSummary = append(ecoOrderSummary, dep.Ecosystem)
-				}
-				byEcoSummary[dep.Ecosystem] = append(byEcoSummary[dep.Ecosystem], dep)
-			}
-			fmt.Fprintf(fociSummary, "<details>\n")
-			fmt.Fprintf(fociSummary, "<summary><strong>All Packages Scanned (%d)</strong></summary>\n\n", len(pkgManagerDeps))
-			for _, eco := range ecoOrderSummary {
-				fmt.Fprintf(fociSummary, "<p><strong>%s</strong></p>\n<ul>\n", eco)
-				for _, dep := range byEcoSummary[eco] {
-					key := dep.Ecosystem + ":" + dep.Name
-					status := "✅"
-					if result, exists := pkgManagerResults[key]; exists && result.Error != "" {
-						if isNotFound(result.Error) {
-							status = "—"
-						} else {
-							status = "❌"
-						}
-					} else if result, exists := pkgManagerResults[key]; exists {
-						hasFoci := false
-						if fociThreshold >= 0 {
-							hasFoci = result.ChangeRatio*100 > fociThreshold
-						} else {
-							hasFoci = result.FociPresent
-						}
-						if hasFoci {
-							status = "⚠️"
-						}
-					} else {
-						status = "—"
-					}
-					fmt.Fprintf(fociSummary, "<li>%s <code>%s</code></li>\n", status, dep.Name)
-				}
-				fmt.Fprintf(fociSummary, "</ul>\n")
-			}
-			fmt.Fprintf(fociSummary, "</details>\n\n")
 		}
 
 		for _, dep := range pkgManagerDeps {
