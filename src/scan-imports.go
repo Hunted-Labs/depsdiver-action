@@ -49,10 +49,15 @@ func main() {
 		if data, err := os.ReadFile(cacheFile); err == nil {
 			var cached map[string]*PackageInfo
 			if err := json.Unmarshal(data, &cached); err == nil {
+				loaded := 0
 				for k, v := range cached {
-					pkgManagerResults[k] = v
+					// Skip cached errors so failures are retried
+					if v.Error == "" {
+						pkgManagerResults[k] = v
+						loaded++
+					}
 				}
-				fmt.Fprintf(os.Stderr, "Loaded %d cached results\n", len(cached))
+				fmt.Fprintf(os.Stderr, "Loaded %d cached results\n", loaded)
 			}
 		}
 	}
@@ -106,9 +111,15 @@ func main() {
 			}
 		}
 
-		// Save updated cache
+		// Save updated cache, excluding errors so failures are retried next run
 		if cacheFile != "" {
-			if data, err := json.Marshal(pkgManagerResults); err == nil {
+			toCache := make(map[string]*PackageInfo, len(pkgManagerResults))
+			for k, v := range pkgManagerResults {
+				if v.Error == "" {
+					toCache[k] = v
+				}
+			}
+			if data, err := json.Marshal(toCache); err == nil {
 				if err := os.MkdirAll(filepath.Dir(cacheFile), 0755); err == nil {
 					os.WriteFile(cacheFile, data, 0644)
 				}
