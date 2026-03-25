@@ -13,16 +13,16 @@ A GitHub Action that scans package manager files in your repository and queries 
 
 ## Supported Ecosystems
 
-| Ecosystem | Files Scanned |
-|-----------|---------------|
-| Go | `go.mod` |
-| npm | `package.json` |
-| PyPI | `requirements.txt`, `pyproject.toml`, `Pipfile` |
-| Cargo (Rust) | `Cargo.toml` |
-| RubyGems | `Gemfile` |
-| Maven | `pom.xml` |
-| NuGet (.NET) | `*.csproj`, `*.vbproj`, `*.fsproj` |
-| Gradle | `build.gradle`, `build.gradle.kts`, `libs.versions.toml` |
+| Ecosystem | Manifest | Lock File (transitive deps) |
+|-----------|----------|-----------------------------|
+| Go | `go.mod` | — |
+| npm | `package.json` | `package-lock.json`, `npm-shrinkwrap.json`, `yarn.lock` |
+| PyPI | `requirements.txt`, `requirements.lock`, `requirements-lock.txt`, `pyproject.toml`, `Pipfile` | `Pipfile.lock`, `poetry.lock` |
+| Cargo (Rust) | `Cargo.toml` | `Cargo.lock` |
+| RubyGems | `Gemfile` | `Gemfile.lock` |
+| Maven | `pom.xml` | — |
+| NuGet (.NET) | `*.csproj`, `*.vbproj`, `*.fsproj` | — |
+| Gradle | `build.gradle`, `build.gradle.kts`, `libs.versions.toml` | — |
 
 ## Usage
 

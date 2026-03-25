@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -16,19 +17,38 @@ type PackageManagerDep struct {
 
 func isPackageManagerFile(name string) bool {
 	switch name {
-	case "go.mod", "package.json", "requirements.txt", "pyproject.toml",
-		"Pipfile", "Cargo.toml", "Gemfile", "pom.xml",
-		"build.gradle", "build.gradle.kts", "libs.versions.toml":
+	case "go.mod",
+		"package.json", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock",
+		"requirements.txt", "requirements.lock", "requirements-lock.txt",
+		"pyproject.toml", "Pipfile", "Pipfile.lock", "poetry.lock",
+		"Cargo.toml", "Cargo.lock",
+		"Gemfile", "Gemfile.lock",
+		"pom.xml", "build.gradle", "build.gradle.kts", "libs.versions.toml":
 		return true
 	}
 	ext := strings.ToLower(filepath.Ext(name))
 	return ext == ".csproj" || ext == ".vbproj" || ext == ".fsproj"
 }
 
-// walks rootDir and parses all package manager files
-func scanPackageManagerFiles(rootDir string) ([]PackageManagerDep, error) {
-	var deps []PackageManagerDep
+// maps a lock file name to the manifest(s) it replaces when
+// both exist in the same dir
+var lockSupersedes = map[string][]string{
+	"Pipfile.lock":          {"Pipfile"},
+	"poetry.lock":           {"pyproject.toml"},
+	"Cargo.lock":            {"Cargo.toml"},
+	"Gemfile.lock":          {"Gemfile"},
+	"package-lock.json":     {"package.json"},
+	"npm-shrinkwrap.json":   {"package.json"},
+	"yarn.lock":             {"package.json"},
+	"requirements.lock":     {"requirements.txt"},
+	"requirements-lock.txt": {"requirements.txt"},
+}
 
+// walks rootDir and parses all package manager files, skipping manifests when
+// a corresponding lock file exists in the same dir
+func scanPackageManagerFiles(rootDir string) ([]PackageManagerDep, error) {
+	// Pass 1: collect all package manager file paths
+	var allPaths []string
 	err := filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -40,32 +60,78 @@ func scanPackageManagerFiles(rootDir string) ([]PackageManagerDep, error) {
 			}
 			return nil
 		}
-		if !isPackageManagerFile(info.Name()) {
-			return nil
+		if isPackageManagerFile(info.Name()) {
+			allPaths = append(allPaths, path)
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
 
+	// Build per-directory file sets and determine which manifests to skip
+	dirFileSet := make(map[string]map[string]bool)
+	for _, p := range allPaths {
+		dir := filepath.Dir(p)
+		if dirFileSet[dir] == nil {
+			dirFileSet[dir] = make(map[string]bool)
+		}
+		dirFileSet[dir][filepath.Base(p)] = true
+	}
+
+	skipPaths := make(map[string]bool)
+	for dir, fileSet := range dirFileSet {
+		for lockFile, manifests := range lockSupersedes {
+			if fileSet[lockFile] {
+				for _, manifest := range manifests {
+					if fileSet[manifest] {
+						skipPaths[filepath.Join(dir, manifest)] = true
+					}
+				}
+			}
+		}
+	}
+
+	// parse non-skipped files
+	var deps []PackageManagerDep
+	for _, path := range allPaths {
+		if skipPaths[path] {
+			continue
+		}
 		relPath, _ := filepath.Rel(rootDir, path)
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return nil
+		content, readErr := os.ReadFile(path)
+		if readErr != nil {
+			continue
 		}
-
+		name := filepath.Base(path)
 		var parsed []PackageManagerDep
-		switch info.Name() {
+		switch name {
 		case "go.mod":
 			parsed = parseGoModFile(string(content), relPath)
 		case "package.json":
 			parsed = parsePackageJSONFile(string(content), relPath)
-		case "requirements.txt":
+		case "package-lock.json", "npm-shrinkwrap.json":
+			parsed = parsePackageLockJSONFile(string(content), relPath)
+		case "yarn.lock":
+			parsed = parseYarnLockFile(string(content), relPath)
+		case "requirements.txt", "requirements.lock", "requirements-lock.txt":
 			parsed = parseRequirementsTxtFile(string(content), relPath)
 		case "pyproject.toml":
 			parsed = parsePyprojectTomlFile(string(content), relPath)
 		case "Pipfile":
 			parsed = parsePipfileFile(string(content), relPath)
+		case "Pipfile.lock":
+			parsed = parsePipfileLockFile(string(content), relPath)
+		case "poetry.lock":
+			parsed = parsePoetryLockFile(string(content), relPath)
 		case "Cargo.toml":
 			parsed = parseCargoTomlFile(string(content), relPath)
+		case "Cargo.lock":
+			parsed = parseCargoLockFile(string(content), relPath)
 		case "Gemfile":
 			parsed = parseGemfileFile(string(content), relPath)
+		case "Gemfile.lock":
+			parsed = parseGemfileLockFile(string(content), relPath)
 		case "pom.xml":
 			parsed = parsePomXmlFile(string(content), relPath)
 		case "build.gradle", "build.gradle.kts":
@@ -73,16 +139,15 @@ func scanPackageManagerFiles(rootDir string) ([]PackageManagerDep, error) {
 		case "libs.versions.toml":
 			parsed = parseVersionCatalogFile(string(content), relPath)
 		default:
-			ext := strings.ToLower(filepath.Ext(info.Name()))
+			ext := strings.ToLower(filepath.Ext(name))
 			if ext == ".csproj" || ext == ".vbproj" || ext == ".fsproj" {
 				parsed = parseCsProjFile(string(content), relPath)
 			}
 		}
 		deps = append(deps, parsed...)
-		return nil
-	})
+	}
 
-	return deps, err
+	return deps, nil
 }
 
 func parseGoModFile(content, relPath string) []PackageManagerDep {
@@ -585,6 +650,180 @@ func parseVersionCatalogFile(content, relPath string) []PackageManagerDep {
 		}
 	}
 	return deps
+}
+
+func parsePipfileLockFile(content, relPath string) []PackageManagerDep {
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(content), &root); err != nil {
+		return nil
+	}
+	var deps []PackageManagerDep
+	for _, section := range []string{"default", "develop"} {
+		raw, ok := root[section]
+		if !ok {
+			continue
+		}
+		var pkgs map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &pkgs); err != nil {
+			continue
+		}
+		for name := range pkgs {
+			if name != "" {
+				deps = append(deps, PackageManagerDep{Name: name, Ecosystem: "pypi", SourceFile: relPath})
+			}
+		}
+	}
+	return deps
+}
+
+func parsePoetryLockFile(content, relPath string) []PackageManagerDep {
+	var deps []PackageManagerDep
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "name = ") {
+			name := strings.Trim(strings.TrimPrefix(trimmed, "name = "), `"`)
+			if name != "" {
+				deps = append(deps, PackageManagerDep{Name: name, Ecosystem: "pypi", SourceFile: relPath})
+			}
+		}
+	}
+	return deps
+}
+
+func parseCargoLockFile(content, relPath string) []PackageManagerDep {
+	var deps []PackageManagerDep
+	var name string
+	hasRegistrySource := false
+
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "[[package]]" {
+			if name != "" && hasRegistrySource {
+				deps = append(deps, PackageManagerDep{Name: name, Ecosystem: "cargo", SourceFile: relPath})
+			}
+			name = ""
+			hasRegistrySource = false
+			continue
+		}
+		if strings.HasPrefix(trimmed, "name = ") {
+			name = strings.Trim(strings.TrimPrefix(trimmed, "name = "), `"`)
+		} else if strings.HasPrefix(trimmed, "source = ") && strings.Contains(trimmed, "registry") {
+			hasRegistrySource = true
+		}
+	}
+	if name != "" && hasRegistrySource {
+		deps = append(deps, PackageManagerDep{Name: name, Ecosystem: "cargo", SourceFile: relPath})
+	}
+	return deps
+}
+
+func parseGemfileLockFile(content, relPath string) []PackageManagerDep {
+	var deps []PackageManagerDep
+	inGemSection := false
+	inSpecs := false
+	gemRe := regexp.MustCompile(`^    ([a-zA-Z0-9][\w.\-]*) \([\d]`)
+
+	for _, line := range strings.Split(content, "\n") {
+		if line == "GEM" {
+			inGemSection = true
+			continue
+		}
+		// Any other all-caps section header ends the GEM block
+		if inGemSection && len(line) > 0 && line[0] != ' ' && strings.ToUpper(line) == line {
+			inGemSection = false
+			inSpecs = false
+			continue
+		}
+		if inGemSection && strings.TrimSpace(line) == "specs:" {
+			inSpecs = true
+			continue
+		}
+		if inSpecs && line == "" {
+			inSpecs = false
+			continue
+		}
+		if inSpecs {
+			if m := gemRe.FindStringSubmatch(line); m != nil {
+				deps = append(deps, PackageManagerDep{Name: m[1], Ecosystem: "rubygems", SourceFile: relPath})
+			}
+		}
+	}
+	return deps
+}
+
+// package-lock.json and npm-shrinkwrap.json (v1, v2, v3)
+func parsePackageLockJSONFile(content, relPath string) []PackageManagerDep {
+	var lockFile struct {
+		Packages     map[string]json.RawMessage `json:"packages"`
+		Dependencies map[string]json.RawMessage `json:"dependencies"`
+	}
+	if err := json.Unmarshal([]byte(content), &lockFile); err != nil {
+		return nil
+	}
+	var deps []PackageManagerDep
+	if len(lockFile.Packages) > 0 {
+		// v2/v3 - keys are "node_modules/name" or "node_modules/@scope/name"
+		for key := range lockFile.Packages {
+			if !strings.HasPrefix(key, "node_modules/") {
+				continue
+			}
+			rest := strings.TrimPrefix(key, "node_modules/")
+			// skip nested node_modules/foo/node_modules/bar
+			if strings.Contains(rest, "node_modules/") {
+				continue
+			}
+			if rest != "" {
+				deps = append(deps, PackageManagerDep{Name: rest, Ecosystem: "npm", SourceFile: relPath})
+			}
+		}
+	} else {
+		// v1 - keys are package names directly
+		for name := range lockFile.Dependencies {
+			if name != "" {
+				deps = append(deps, PackageManagerDep{Name: name, Ecosystem: "npm", SourceFile: relPath})
+			}
+		}
+	}
+	return deps
+}
+
+func parseYarnLockFile(content, relPath string) []PackageManagerDep {
+	var deps []PackageManagerDep
+	seen := make(map[string]bool)
+
+	for _, line := range strings.Split(content, "\n") {
+		// Entry headers are unindented and end with ':'
+		if line == "" || line[0] == ' ' || line[0] == '\t' || line[0] == '#' {
+			continue
+		}
+		line = strings.TrimSuffix(strings.Trim(line, `"`), ":")
+		for _, spec := range strings.Split(line, ", ") {
+			spec = strings.TrimSpace(strings.Trim(spec, `"`))
+			name := extractYarnPackageName(spec)
+			if name != "" && !seen[name] {
+				seen[name] = true
+				deps = append(deps, PackageManagerDep{Name: name, Ecosystem: "npm", SourceFile: relPath})
+			}
+		}
+	}
+	return deps
+}
+
+func extractYarnPackageName(spec string) string {
+	if strings.HasPrefix(spec, "@") {
+		// scoped package
+		rest := spec[1:]
+		idx := strings.Index(rest, "@")
+		if idx < 0 {
+			return spec
+		}
+		return "@" + rest[:idx]
+	}
+	idx := strings.Index(spec, "@")
+	if idx <= 0 {
+		return spec
+	}
+	return spec[:idx]
 }
 
 // deduplicates by ecosystem:name
