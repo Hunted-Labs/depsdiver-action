@@ -269,7 +269,7 @@ func main() {
 		fmt.Printf("Passed: %d\n", passedCount)
 		fmt.Printf("FOCI detected: %d\n", fociPresentCount)
 		if packagesNotFound > 0 {
-			fmt.Printf("Not in DepsDiver database: %d\n", packagesNotFound)
+			fmt.Printf("No data available: %d\n", packagesNotFound)
 		}
 		if packagesWithErrors > 0 {
 			fmt.Printf("API errors: %d\n", packagesWithErrors)
@@ -280,7 +280,7 @@ func main() {
 		if fociSummary != nil {
 			fmt.Fprintf(fociSummary, "**Results:** %d passed · %d FOCI detected", passedCount, fociPresentCount)
 			if packagesNotFound > 0 {
-				fmt.Fprintf(fociSummary, " · %d not in DepsDiver DB", packagesNotFound)
+				fmt.Fprintf(fociSummary, " · %d no data available", packagesNotFound)
 			}
 			fmt.Fprintf(fociSummary, "\n\n")
 		}
@@ -451,7 +451,7 @@ func main() {
 					fmt.Printf("- `%s` ⚠️ FOCI detected (%.1f%%)\n", dep.Name, result.ChangeRatio*100)
 				} else if result.Error != "" {
 				if isNotFound(result.Error) {
-					fmt.Printf("- `%s` (not in DepsDiver database)\n", dep.Name)
+					fmt.Printf("- `%s` (no data available)\n", dep.Name)
 				} else {
 					fmt.Printf("- `%s` (API error: %s)\n", dep.Name, result.Error)
 				}
