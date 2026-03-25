@@ -5,19 +5,21 @@ A GitHub Action that scans package manager files in your repository and queries 
 ## Features
 
 - Scans package manager files across all major ecosystems
+- Prefers lock files over manifests. When a lock file is present, the corresponding manifest is skipped to avoid duplicates and ensure transitive dependencies are included
 - Reports FOCI presence and per-country contribution analysis per package
 - Links directly to the full DepsDiver report for each flagged dependency
 - Generates a markdown report and GitHub Actions step summary
 - Uploads the report as a downloadable artifact
+- Caches API results automatically between runs. Only newly added or changed packages are queried, keeping repeat scans fast
 - Automatically skips `vendor/`, `.git/`, `node_modules/`, `target/`, `build/`, `dist/`, `.idea/`, and `__pycache__/` directories
 
 ## Supported Ecosystems
 
-| Ecosystem | Manifest | Lock File (transitive deps) |
-|-----------|----------|-----------------------------|
+| Ecosystem | Manifest (used if no lock file) | Lock File (preferred, includes transitive deps) |
+|-----------|----------------------------------|--------------------------------------------------|
 | Go | `go.mod` | — |
 | npm | `package.json` | `package-lock.json`, `npm-shrinkwrap.json`, `yarn.lock` |
-| PyPI | `requirements.txt`, `requirements.lock`, `requirements-lock.txt`, `pyproject.toml`, `Pipfile` | `Pipfile.lock`, `poetry.lock` |
+| PyPI | `requirements.txt`, `pyproject.toml`, `Pipfile` | `requirements.lock`, `requirements-lock.txt`, `Pipfile.lock`, `poetry.lock` |
 | Cargo (Rust) | `Cargo.toml` | `Cargo.lock` |
 | RubyGems | `Gemfile` | `Gemfile.lock` |
 | Maven | `pom.xml` | — |

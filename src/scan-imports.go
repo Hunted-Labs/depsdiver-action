@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -42,17 +43,40 @@ func main() {
 	pkgManagerResults := make(map[string]*PackageInfo)
 	apiClient := &http.Client{Timeout: 30 * time.Second}
 
-	if depsDiverToken != "" && len(pkgManagerDeps) > 0 {
-		fmt.Fprintf(os.Stderr, "Querying DepsDiver API for %d packages...\n", len(pkgManagerDeps))
+	// Load cache if available
+	cacheFile := os.Getenv("DEPSDIVER_CACHE_FILE")
+	if cacheFile != "" {
+		if data, err := os.ReadFile(cacheFile); err == nil {
+			var cached map[string]*PackageInfo
+			if err := json.Unmarshal(data, &cached); err == nil {
+				for k, v := range cached {
+					pkgManagerResults[k] = v
+				}
+				fmt.Fprintf(os.Stderr, "Loaded %d cached results\n", len(cached))
+			}
+		}
+	}
+
+	// Only query packages not already in cache
+	var uncachedDeps []PackageManagerDep
+	for _, dep := range pkgManagerDeps {
+		key := dep.Ecosystem + ":" + dep.Name
+		if _, cached := pkgManagerResults[key]; !cached {
+			uncachedDeps = append(uncachedDeps, dep)
+		}
+	}
+
+	if depsDiverToken != "" && len(uncachedDeps) > 0 {
+		fmt.Fprintf(os.Stderr, "Querying DepsDiver API for %d packages (%d cached)...\n", len(uncachedDeps), len(pkgManagerDeps)-len(uncachedDeps))
 
 		// Bulk query in chunks of 20
 		const chunkSize = 20
-		for i := 0; i < len(pkgManagerDeps); i += chunkSize {
+		for i := 0; i < len(uncachedDeps); i += chunkSize {
 			end := i + chunkSize
-			if end > len(pkgManagerDeps) {
-				end = len(pkgManagerDeps)
+			if end > len(uncachedDeps) {
+				end = len(uncachedDeps)
 			}
-			chunk := pkgManagerDeps[i:end]
+			chunk := uncachedDeps[i:end]
 
 			bulkResults, err := queryDepsDiverAPIBulk(apiClient, depsDiverAPIURL, depsDiverToken, chunk)
 			if err != nil {
@@ -78,6 +102,15 @@ func main() {
 						pkgManagerResults[key] = info
 					}
 					time.Sleep(100 * time.Millisecond)
+				}
+			}
+		}
+
+		// Save updated cache
+		if cacheFile != "" {
+			if data, err := json.Marshal(pkgManagerResults); err == nil {
+				if err := os.MkdirAll(filepath.Dir(cacheFile), 0755); err == nil {
+					os.WriteFile(cacheFile, data, 0644)
 				}
 			}
 		}

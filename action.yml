@@ -46,7 +46,15 @@ runs:
       uses: actions/setup-go@v6
       with:
         go-version: '1.21'
-      
+
+    - name: Restore DepsDiver cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.depsdiver-cache
+        key: depsdiver-${{ runner.os }}-${{ hashFiles('**/package-lock.json', '**/yarn.lock', '**/Cargo.lock', '**/Gemfile.lock', '**/poetry.lock', '**/Pipfile.lock', '**/go.sum', '**/requirements*.txt', '**/requirements*.lock', '**/pom.xml', '**/build.gradle', '**/build.gradle.kts', '**/*.csproj', '**/*.vbproj', '**/*.fsproj') }}
+        restore-keys: |
+          depsdiver-${{ runner.os }}-
+
     - name: Scan dependencies for FOCI
       id: scan
       shell: bash
@@ -55,6 +63,7 @@ runs:
         DEPSDIVER_API_URL: ${{ inputs.depsdiver-api-url }}
         FOCI_SUMMARY_FILE: "${{ github.workspace }}/foci-summary.txt"
         FOCI_THRESHOLD: ${{ inputs.foci-threshold }}
+        DEPSDIVER_CACHE_FILE: "$HOME/.depsdiver-cache/results.json"
       run: |
         # Run the scanner from the action directory
         cd "${{ github.action_path }}"
