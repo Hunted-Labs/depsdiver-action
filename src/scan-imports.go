@@ -145,10 +145,6 @@ func main() {
 		}
 	}
 
-	isNotFound := func(errStr string) bool {
-		return strings.Contains(errStr, "status 404") || strings.Contains(errStr, "package not found in API response")
-	}
-
 	tallyResult := func(result *PackageInfo) {
 		if result.Error != "" {
 			if isNotFound(result.Error) {
@@ -479,6 +475,10 @@ func main() {
 
 func getCurrentTime() string {
 	return time.Now().UTC().Format("2006-01-02 15:04:05 UTC")
+}
+
+func isNotFound(errStr string) bool {
+	return strings.Contains(errStr, "status 404") || strings.Contains(errStr, "package not found in API response")
 }
 
 func formatPct(ratio float64) string {
