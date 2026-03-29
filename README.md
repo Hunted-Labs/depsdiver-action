@@ -19,7 +19,7 @@ A GitHub Action that scans package manager files in your repository and queries 
 |-----------|----------------------------------|--------------------------------------------------|
 | Go | `go.mod` | — |
 | npm | `package.json` | `package-lock.json`, `npm-shrinkwrap.json`, `yarn.lock` |
-| PyPI | `requirements.txt`, `pyproject.toml`, `Pipfile` | `requirements.lock`, `requirements-lock.txt`, `Pipfile.lock`, `poetry.lock` |
+| PyPI | `requirements*.txt`, `pyproject.toml`, `Pipfile` | `requirements.lock`, `requirements-lock.txt`, `Pipfile.lock`, `poetry.lock` |
 | Cargo (Rust) | `Cargo.toml` | `Cargo.lock` |
 | RubyGems | `Gemfile` | `Gemfile.lock` |
 | Maven | `pom.xml` | — |
@@ -46,7 +46,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Scan dependencies
-        uses: Hunted-Labs/depsdiver-action@v1
+        uses: Hunted-Labs/depsdiver-action@v2
         with:
           depsdiver-api-url: 'https://depsdiver.com/api'
           depsdiver-token: ${{ secrets.DEPSDIVER_TOKEN }}
@@ -70,7 +70,7 @@ jobs:
 
       - name: Scan dependencies
         id: scan
-        uses: Hunted-Labs/depsdiver-action@v1
+        uses: Hunted-Labs/depsdiver-action@v2
         with:
           path: '.'                              # Directory to scan (default: '.')
           output-file: 'foci-report.txt'         # Report file name (default: 'deps-foci-report.txt')
@@ -185,7 +185,7 @@ Total repository FOCI locations: 3
 
 ## Versioning
 
-Use `@v1` for the latest v1.x release, `@v1.0.0` for a pinned version, or `@main` for the latest (not recommended for production).
+Use `@v2` for the latest v2.x release, `@v2.0.0` for a pinned version, or `@main` for the latest (not recommended for production).
 
 ## License
 

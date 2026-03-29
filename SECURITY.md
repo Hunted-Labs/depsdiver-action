@@ -15,7 +15,8 @@ We will acknowledge your report within 48 hours and aim to release a fix within 
 
 | Version | Supported |
 |---------|-----------|
-| `@v1` (latest) | ✅ |
+| `@v2` (latest) | ✅ |
+| `@v1` | ✅ |
 | Older tags | ❌ |
 
 ## Security Considerations for Users

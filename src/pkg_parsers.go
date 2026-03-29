@@ -27,7 +27,11 @@ func isPackageManagerFile(name string) bool {
 		return true
 	}
 	ext := strings.ToLower(filepath.Ext(name))
-	return ext == ".csproj" || ext == ".vbproj" || ext == ".fsproj"
+	if ext == ".csproj" || ext == ".vbproj" || ext == ".fsproj" {
+		return true
+	}
+	// requirements_linux.txt, requirements_macos.txt, requirements_windows.txt, etc.
+	return strings.HasPrefix(name, "requirements") && ext == ".txt"
 }
 
 // maps a lock file name to the manifest(s) it replaces when
@@ -142,6 +146,8 @@ func scanPackageManagerFiles(rootDir string) ([]PackageManagerDep, error) {
 			ext := strings.ToLower(filepath.Ext(name))
 			if ext == ".csproj" || ext == ".vbproj" || ext == ".fsproj" {
 				parsed = parseCsProjFile(string(content), relPath)
+			} else if strings.HasPrefix(name, "requirements") && ext == ".txt" {
+				parsed = parseRequirementsTxtFile(string(content), relPath)
 			}
 		}
 		deps = append(deps, parsed...)
