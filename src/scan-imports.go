@@ -312,14 +312,14 @@ func main() {
 				fmt.Printf("**Repository:** `%s/%s`\n", result.Owner, result.Name)
 			}
 
-			fmt.Printf("**Total Foreign Contribution:** %.1f%%\n\n", result.ChangeRatio*100)
+			fmt.Printf("**Total Foreign Contribution:** %s\n\n", formatPct(result.ChangeRatio))
 
 			// Countries of concern from foci_stats
 			if len(result.FociStats) > 0 {
 				fmt.Println("**Countries of Concern:**")
 				for _, stat := range result.FociStats {
 					if stat.FociPresent && stat.CountryName != "" {
-						fmt.Printf("- %s — %.1f%%\n", stat.CountryName, stat.ChangeRatio*100)
+						fmt.Printf("- %s — %s\n", stat.CountryName, formatPct(stat.ChangeRatio))
 					}
 				}
 				fmt.Println()
@@ -356,14 +356,14 @@ func main() {
 				if result.Owner != "" && result.Name != "" {
 					fmt.Fprintf(fociSummary, " — <code>%s/%s</code>", result.Owner, result.Name)
 				}
-				fmt.Fprintf(fociSummary, " — %.1f%% foreign contribution</summary>\n\n", result.ChangeRatio*100)
+				fmt.Fprintf(fociSummary, " — %s foreign contribution</summary>\n\n", formatPct(result.ChangeRatio))
 				fmt.Fprintf(fociSummary, "<p>🔗 <a href=\"%s\"><strong>View Full Report on Hunted Labs</strong></a></p>\n\n", reportURLHTML)
 
 				if len(result.FociStats) > 0 {
 					fmt.Fprintf(fociSummary, "<table>\n<tr><th>Country</th><th>Contribution</th><th>Risk</th></tr>\n")
 					for _, stat := range result.FociStats {
 						if stat.FociPresent && stat.CountryName != "" {
-							fmt.Fprintf(fociSummary, "<tr><td>%s</td><td>%.1f%%</td><td>⚠️ FOCI</td></tr>\n", stat.CountryName, stat.ChangeRatio*100)
+							fmt.Fprintf(fociSummary, "<tr><td>%s</td><td>%s</td><td>⚠️ FOCI</td></tr>\n", stat.CountryName, formatPct(stat.ChangeRatio))
 						}
 					}
 					fmt.Fprintf(fociSummary, "</table>\n\n")
@@ -448,7 +448,7 @@ func main() {
 					}
 				}
 				if hasFoci {
-					fmt.Printf("- `%s` ⚠️ FOCI detected (%.1f%%)\n", dep.Name, result.ChangeRatio*100)
+					fmt.Printf("- `%s` ⚠️ FOCI detected (%s)\n", dep.Name, formatPct(result.ChangeRatio))
 				} else if result.Error != "" {
 				if isNotFound(result.Error) {
 					fmt.Printf("- `%s` (no data available)\n", dep.Name)
@@ -478,6 +478,14 @@ func main() {
 
 func getCurrentTime() string {
 	return time.Now().UTC().Format("2006-01-02 15:04:05 UTC")
+}
+
+func formatPct(ratio float64) string {
+	pct := ratio * 100
+	if pct > 0 && pct < 0.1 {
+		return "<0.1%"
+	}
+	return fmt.Sprintf("%.1f%%", pct)
 }
 
 // PackageInfo represents the information returned from the DepsDiver API
