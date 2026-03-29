@@ -47,6 +47,21 @@ runs:
       with:
         go-version: '1.21'
 
+    - name: Restore DepsDiver binary cache
+      id: binary-cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/.depsdiver-bin
+        key: depsdiver-bin-${{ runner.os }}-${{ hashFiles('src/**/*.go', 'go.mod') }}
+
+    - name: Build scanner
+      if: steps.binary-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        mkdir -p "${{ runner.temp }}/.depsdiver-bin"
+        cd "${{ github.action_path }}"
+        go build -o "${{ runner.temp }}/.depsdiver-bin/scan-deps" src/scan-imports.go src/pkg_parsers.go
+
     - name: Restore DepsDiver cache
       uses: actions/cache@v4
       with:
@@ -65,9 +80,8 @@ runs:
         FOCI_THRESHOLD: ${{ inputs.foci-threshold }}
         DEPSDIVER_CACHE_FILE: "${{ runner.temp }}/.depsdiver-cache/results.json"
       run: |
-        # Run the scanner from the action directory
-        cd "${{ github.action_path }}"
-        go run src/scan-imports.go src/pkg_parsers.go "${{ github.workspace }}/${{ inputs.path }}" > "${{ github.workspace }}/${{ inputs.output-file }}" 2>&1
+        # Run the pre-built scanner binary
+        "${{ runner.temp }}/.depsdiver-bin/scan-deps" "${{ github.workspace }}/${{ inputs.path }}" > "${{ github.workspace }}/${{ inputs.output-file }}" 2>&1
 
         # Extract summary stats from the report
         REPORT_PATH="${{ github.workspace }}/${{ inputs.output-file }}"

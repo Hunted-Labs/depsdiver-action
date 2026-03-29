@@ -51,8 +51,9 @@ func main() {
 			if err := json.Unmarshal(data, &cached); err == nil {
 				loaded := 0
 				for k, v := range cached {
-					// Skip cached errors so failures are retried
-					if v.Error == "" {
+					// Skip cached server errors so failures are retried
+					// not found results added to cache though
+					if v.Error == "" || isNotFound(v.Error) {
 						pkgManagerResults[k] = v
 						loaded++
 					}
@@ -111,11 +112,11 @@ func main() {
 			}
 		}
 
-		// Save updated cache, excluding errors so failures are retried next run
+		// Save updated cache, include 404s and no-data results, exclude only server errors
 		if cacheFile != "" {
 			toCache := make(map[string]*PackageInfo, len(pkgManagerResults))
 			for k, v := range pkgManagerResults {
-				if v.Error == "" {
+				if v.Error == "" || isNotFound(v.Error) {
 					toCache[k] = v
 				}
 			}
