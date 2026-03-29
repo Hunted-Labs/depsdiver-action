@@ -52,7 +52,7 @@ runs:
       uses: actions/cache@v4
       with:
         path: ${{ runner.temp }}/.depsdiver-bin
-        key: depsdiver-bin-${{ runner.os }}-${{ hashFiles('src/**/*.go', 'go.mod') }}
+        key: depsdiver-bin-${{ runner.os }}-${{ github.action_ref }}
 
     - name: Build scanner
       if: steps.binary-cache.outputs.cache-hit != 'true'
@@ -66,7 +66,7 @@ runs:
       uses: actions/cache@v4
       with:
         path: ${{ runner.temp }}/.depsdiver-cache
-        key: depsdiver-${{ runner.os }}-${{ hashFiles('**/package-lock.json', '**/yarn.lock', '**/Cargo.lock', '**/Gemfile.lock', '**/poetry.lock', '**/Pipfile.lock', '**/go.sum', '**/requirements*.txt', '**/requirements*.lock', '**/pom.xml', '**/build.gradle', '**/build.gradle.kts', '**/*.csproj', '**/*.vbproj', '**/*.fsproj') }}
+        key: depsdiver-${{ runner.os }}-${{ github.run_id }}
         restore-keys: |
           depsdiver-${{ runner.os }}-
 
@@ -80,8 +80,8 @@ runs:
         FOCI_THRESHOLD: ${{ inputs.foci-threshold }}
         DEPSDIVER_CACHE_FILE: "${{ runner.temp }}/.depsdiver-cache/results.json"
       run: |
-        # Run the pre-built scanner binary
-        "${{ runner.temp }}/.depsdiver-bin/scan-deps" "${{ github.workspace }}/${{ inputs.path }}" > "${{ github.workspace }}/${{ inputs.output-file }}" 2>&1
+        # Run the pre-built scanner binary (stderr goes to log, stdout to report)
+        "${{ runner.temp }}/.depsdiver-bin/scan-deps" "${{ github.workspace }}/${{ inputs.path }}" > "${{ github.workspace }}/${{ inputs.output-file }}"
 
         # Extract summary stats from the report
         REPORT_PATH="${{ github.workspace }}/${{ inputs.output-file }}"

@@ -107,7 +107,7 @@ func main() {
 					} else {
 						pkgManagerResults[key] = info
 					}
-					time.Sleep(100 * time.Millisecond)
+					time.Sleep(25 * time.Millisecond)
 				}
 			}
 		}
