@@ -79,21 +79,23 @@ runs:
         FOCI_SUMMARY_FILE: "${{ github.workspace }}/foci-summary.txt"
         FOCI_THRESHOLD: ${{ inputs.foci-threshold }}
         DEPSDIVER_CACHE_FILE: "${{ runner.temp }}/.depsdiver-cache/results.json"
+        SCAN_PATH: "${{ github.workspace }}/${{ inputs.path }}"
+        OUTPUT_FILE: "${{ github.workspace }}/${{ inputs.output-file }}"
+        REPORT_ARTIFACT_NAME: "${{ inputs.output-file }}"
       run: |
         # Run the pre-built scanner binary (stderr goes to log, stdout to report)
-        "${{ runner.temp }}/.depsdiver-bin/scan-deps" "${{ github.workspace }}/${{ inputs.path }}" > "${{ github.workspace }}/${{ inputs.output-file }}"
+        "${{ runner.temp }}/.depsdiver-bin/scan-deps" "$SCAN_PATH" > "$OUTPUT_FILE"
 
         # Extract summary stats from the report
-        REPORT_PATH="${{ github.workspace }}/${{ inputs.output-file }}"
-        if [ -f "$REPORT_PATH" ]; then
-          TOTAL=$(grep -E "^Package manager dependencies found:" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
-          FOCI=$(grep -E "^FOCI detected:" "$REPORT_PATH" | grep -oE '[0-9]+' || echo "0")
+        if [ -f "$OUTPUT_FILE" ]; then
+          TOTAL=$(grep -E "^Package manager dependencies found:" "$OUTPUT_FILE" | grep -oE '[0-9]+' || echo "0")
+          FOCI=$(grep -E "^FOCI detected:" "$OUTPUT_FILE" | grep -oE '[0-9]+' || echo "0")
           echo "total-packages=$TOTAL" >> $GITHUB_OUTPUT
           echo "foci-packages=$FOCI" >> $GITHUB_OUTPUT
-          echo "report-file=${{ inputs.output-file }}" >> $GITHUB_OUTPUT
+          echo "report-file=$REPORT_ARTIFACT_NAME" >> $GITHUB_OUTPUT
         fi
 
-        cat "$REPORT_PATH"
+        cat "$OUTPUT_FILE"
         
     - name: Upload import report
       if: always()
@@ -107,9 +109,15 @@ runs:
     - name: Output summary
       if: always()
       shell: bash
+      env:
+        REPORT_PATH: "${{ github.workspace }}/${{ inputs.output-file }}"
+        FOCI_SUMMARY_PATH: "${{ github.workspace }}/foci-summary.txt"
+        TOTAL_PACKAGES: ${{ steps.scan.outputs.total-packages }}
+        FOCI_PACKAGES: ${{ steps.scan.outputs.foci-packages }}
+        FOCI_THRESHOLD: ${{ inputs.foci-threshold }}
+        ARTIFACT_NAME: ${{ inputs.artifact-name }}
+        ARTIFACT_RETENTION_DAYS: ${{ inputs.artifact-retention-days }}
       run: |
-        REPORT_PATH="${{ github.workspace }}/${{ inputs.output-file }}"
-        FOCI_SUMMARY_PATH="${{ github.workspace }}/foci-summary.txt"
         if [ -f "$REPORT_PATH" ]; then
           # Header with icon
           echo "## 🔍 Dependency FOCI Scan Complete" >> $GITHUB_STEP_SUMMARY
@@ -118,19 +126,17 @@ runs:
           # Summary statistics table
           echo "<table>" >> $GITHUB_STEP_SUMMARY
           echo "<tr><th>Metric</th><th>Count</th></tr>" >> $GITHUB_STEP_SUMMARY
-          echo "<tr><td>Total Packages</td><td><strong>${{ steps.scan.outputs.total-packages }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
-          echo "<tr><td>Packages with FOCI</td><td><strong>${{ steps.scan.outputs.foci-packages }}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
+          echo "<tr><td>Total Packages</td><td><strong>${TOTAL_PACKAGES}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
+          echo "<tr><td>Packages with FOCI</td><td><strong>${FOCI_PACKAGES}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
           echo "</table>" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           # Add FOCI threshold result if enforcement is enabled
-          if [ -n "${{ inputs.foci-threshold }}" ]; then
-            FOCI_COUNT="${{ steps.scan.outputs.foci-packages }}"
-            THRESHOLD="${{ inputs.foci-threshold }}"
-            if [ "${FOCI_COUNT:-0}" -gt "0" ]; then
-              echo "> **FOCI threshold:** ${FOCI_COUNT} package(s) have a FOCI change ratio above ${THRESHOLD}%" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${FOCI_THRESHOLD}" ]; then
+            if [ "${FOCI_PACKAGES:-0}" -gt "0" ]; then
+              echo "> **FOCI threshold:** ${FOCI_PACKAGES} package(s) have a FOCI change ratio above ${FOCI_THRESHOLD}%" >> $GITHUB_STEP_SUMMARY
             else
-              echo "> **FOCI threshold:** No packages had a FOCI change ratio above ${THRESHOLD}%" >> $GITHUB_STEP_SUMMARY
+              echo "> **FOCI threshold:** No packages had a FOCI change ratio above ${FOCI_THRESHOLD}%" >> $GITHUB_STEP_SUMMARY
             fi
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
@@ -152,9 +158,9 @@ runs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "The complete import report with detailed FOCI analysis has been uploaded as an artifact." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Artifact Name:** \`${{ inputs.artifact-name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Artifact Name:** \`${ARTIFACT_NAME}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Retention:** ${{ inputs.artifact-retention-days }} days" >> $GITHUB_STEP_SUMMARY
+          echo "**Retention:** ${ARTIFACT_RETENTION_DAYS} days" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "</details>" >> $GITHUB_STEP_SUMMARY
         else
