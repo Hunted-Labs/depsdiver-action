@@ -16,6 +16,7 @@ concurrency:
 # Restrict the GITHUB_TOKEN to read-only.
 permissions:
   contents: read
+  security-events: write
 
 jobs:
   zizmor-lint:
