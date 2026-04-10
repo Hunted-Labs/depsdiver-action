@@ -9,8 +9,6 @@ Please include:
 - Steps to reproduce
 - Potential impact
 
-We will acknowledge your report within 48 hours and aim to release a fix within 14 days for confirmed vulnerabilities.
-
 ## Supported Versions
 
 | Version | Supported |
