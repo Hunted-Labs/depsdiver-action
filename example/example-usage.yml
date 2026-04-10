@@ -1,0 +1,28 @@
+name: DepsDiver Example
+
+# This is an example workflow showing how to use this action in another repository
+# To use this action in your repository, copy the job below to your workflow
+
+on:
+  workflow_dispatch:
+
+jobs:
+  scan-imports-example:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Scan Go imports
+        id: scan
+        uses: Hunted-Labs/depsdiver-action@20953f2915b648144e30357e91a8a15eaa77cbf0 # v2.5.0
+        with:
+          path: "."
+          output-file: "go-imports-report.txt"
+          artifact-name: "go-imports-report"
+          artifact-retention-days: "30"
+          depsdiver-api-url: "https://depsdiver.com/api"
+          depsdiver-token: ${{ secrets.DEPSDIVER_API_TOKEN }}
+          foci-threshold: "1" # Include packages with >1% FOCI change ratio in the report
