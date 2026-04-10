@@ -1,55 +1,55 @@
-name: 'DepsDiver Dependency FOCI Scanner'
-description: 'Scan package manager files and query DepsDiver to detect FOCI in your dependencies'
+name: "DepsDiver Dependency FOCI Scanner"
+description: "Scan package manager files and query DepsDiver to detect FOCI in your dependencies"
 branding:
-  icon: 'search'
-  color: 'blue'
+  icon: "search"
+  color: "blue"
 inputs:
   path:
-    description: 'Directory path to scan (default: repository root)'
+    description: "Directory path to scan (default: repository root)"
     required: false
-    default: '.'
+    default: "."
   output-file:
-    description: 'Output file name for the dependency FOCI report'
+    description: "Output file name for the dependency FOCI report"
     required: false
-    default: 'deps-foci-report.txt'
+    default: "deps-foci-report.txt"
   artifact-name:
-    description: 'Name of the artifact to upload'
+    description: "Name of the artifact to upload"
     required: false
-    default: 'deps-foci-report'
+    default: "deps-foci-report"
   artifact-retention-days:
-    description: 'Number of days to retain the artifact'
+    description: "Number of days to retain the artifact"
     required: false
-    default: '30'
+    default: "30"
   depsdiver-api-url:
-    description: 'DepsDiver API base URL (e.g., https://depsdiver.com/api)'
+    description: "DepsDiver API base URL (e.g., https://depsdiver.com/api)"
     required: false
-    default: ''
+    default: ""
   depsdiver-token:
-    description: 'DepsDiver API token (should be set as secret)'
+    description: "DepsDiver API token (should be set as secret)"
     required: false
-    default: ''
+    default: ""
   foci-threshold:
-    description: 'FOCI change ratio threshold (0-100). Only packages whose change_ratio exceeds this percentage are included in the FOCI report section. Leave empty to include all packages with any FOCI data.'
+    description: "FOCI change ratio threshold (0-100). Only packages whose change_ratio exceeds this percentage are included in the FOCI report section. Leave empty to include all packages with any FOCI data."
     required: false
-    default: ''
+    default: ""
 outputs:
   report-file:
-    description: 'Path to the generated report file'
+    description: "Path to the generated report file"
   total-packages:
-    description: 'Total number of dependencies found across all package manager files'
+    description: "Total number of dependencies found across all package manager files"
   foci-packages:
-    description: 'Number of packages with FOCI detected'
+    description: "Number of packages with FOCI detected"
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
     - name: Set up Go
-      uses: actions/setup-go@v6
+      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
       with:
-        go-version: '1.21'
+        go-version: "1.26"
 
     - name: Restore DepsDiver binary cache
       id: binary-cache
-      uses: actions/cache@v4
+      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         path: ${{ runner.temp }}/.depsdiver-bin
         key: depsdiver-bin-${{ runner.os }}-${{ github.action_ref }}
@@ -63,7 +63,7 @@ runs:
         go build -o "${{ runner.temp }}/.depsdiver-bin/scan-deps" src/scan-imports.go src/pkg_parsers.go
 
     - name: Restore DepsDiver cache
-      uses: actions/cache@v4
+      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         path: ${{ runner.temp }}/.depsdiver-cache
         key: depsdiver-${{ runner.os }}-${{ github.run_id }}
@@ -96,16 +96,16 @@ runs:
         fi
 
         cat "$OUTPUT_FILE"
-        
+
     - name: Upload import report
       if: always()
-      uses: actions/upload-artifact@v7
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
       with:
         name: ${{ inputs.artifact-name }}
         path: ${{ github.workspace }}/${{ inputs.output-file }}
         retention-days: ${{ inputs.artifact-retention-days }}
         if-no-files-found: warn
-        
+
     - name: Output summary
       if: always()
       shell: bash
@@ -168,4 +168,3 @@ runs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "> ⚠️ No package manager files found in the project." >> $GITHUB_STEP_SUMMARY
         fi
-
