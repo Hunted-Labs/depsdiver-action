@@ -11,18 +11,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
-        
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
       # Replace 'your-username/hl-action@v1' with your actual repository path
       - name: Scan Go imports
         id: scan
-        uses: your-username/hl-action@v1
+        uses: Hunted-Labs/depsdiver-action@20953f2915b648144e30357e91a8a15eaa77cbf0 # v2.5.0
         with:
-          path: '.'
-          output-file: 'go-imports-report.txt'
-          artifact-name: 'go-imports-report'
-          artifact-retention-days: '30'
-      
+          path: "."
+          output-file: "go-imports-report.txt"
+          artifact-name: "go-imports-report"
+          artifact-retention-days: "30"
+
       - name: Use scan results
         run: |
           echo "Scan completed!"
