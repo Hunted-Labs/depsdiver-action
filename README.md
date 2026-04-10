@@ -30,6 +30,8 @@ A GitHub Action that scans package manager files in your repository and queries 
 
 ### Basic Usage
 
+See `example` directory for a full example workflow.
+
 ```yaml
 name: Scan Dependencies for FOCI
 
@@ -43,10 +45,10 @@ jobs:
   foci-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Scan dependencies
-        uses: Hunted-Labs/depsdiver-action@v2
+        uses: Hunted-Labs/depsdiver-action@20953f2915b648144e30357e91a8a15eaa77cbf0 # v2.5.0
         with:
           depsdiver-api-url: 'https://depsdiver.com/api'
           depsdiver-token: ${{ secrets.DEPSDIVER_TOKEN }}
@@ -66,11 +68,11 @@ jobs:
   foci-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Scan dependencies
         id: scan
-        uses: Hunted-Labs/depsdiver-action@v2
+        uses: Hunted-Labs/depsdiver-action@20953f2915b648144e30357e91a8a15eaa77cbf0 # v2.5.0
         with:
           path: '.'                              # Directory to scan (default: '.')
           output-file: 'foci-report.txt'         # Report file name (default: 'deps-foci-report.txt')
@@ -185,7 +187,7 @@ Total repository FOCI locations: 3
 
 ## Versioning
 
-Use `@v2` for the latest v2.x release, `@v2.0.0` for a pinned version, or `@main` for the latest (not recommended for production).
+It is highly suggested to pin to a specific git commit hash. See `example` directory for how to do this.
 
 ## License
 
