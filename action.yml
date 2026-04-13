@@ -47,44 +47,76 @@ runs:
       with:
         go-version: "1.26.0"
 
-    - name: Restore DepsDiver binary cache
+    - name: Restore report formatter binary cache
       id: binary-cache
       uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
-        path: ${{ runner.temp }}/.depsdiver-bin
+        path: ${{ runner.temp }}/.depsdiver-bin/scan-deps
         key: depsdiver-bin-${{ runner.os }}-${{ github.action_ref }}
 
-    - name: Build scanner
+    - name: Build report formatter
       if: steps.binary-cache.outputs.cache-hit != 'true'
       shell: bash
       run: |
         mkdir -p "${{ runner.temp }}/.depsdiver-bin"
         cd "${{ github.action_path }}"
-        go build -o "${{ runner.temp }}/.depsdiver-bin/scan-deps" src/scan-imports.go src/pkg_parsers.go
+        go build -o "${{ runner.temp }}/.depsdiver-bin/scan-deps" src/scan-imports.go
 
-    - name: Restore DepsDiver cache
+    # DIVER_VERSION: update this when a new diver release is available
+    - name: Restore diver binary cache
+      id: diver-cache
       uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
-        path: ${{ runner.temp }}/.depsdiver-cache
-        key: depsdiver-${{ runner.os }}-${{ github.run_id }}
+        path: ${{ runner.temp }}/.depsdiver-bin/diver
+        key: diver-bin-${{ runner.os }}-${{ runner.arch }}-v0.2.5
+
+    - name: Download diver
+      if: steps.diver-cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        DIVER_VERSION: "0.2.5"
+        RUNNER_OS: ${{ runner.os }}
+        RUNNER_ARCH: ${{ runner.arch }}
+      run: |
+        mkdir -p "${{ runner.temp }}/.depsdiver-bin"
+        OS="$RUNNER_OS"
+        ARCH="$RUNNER_ARCH"
+        if [ "$OS" = "macOS" ]; then OS="Darwin"; fi
+        if [ "$ARCH" = "X64" ]; then ARCH="x86_64"; fi
+        if [ "$ARCH" = "ARM64" ]; then ARCH="arm64"; fi
+        curl -fsSL "https://hl-tools.s3.us-east-1.amazonaws.com/diver/${DIVER_VERSION}/diver_v${DIVER_VERSION}_${OS}_${ARCH}.tar.gz" \
+          -o /tmp/diver.tar.gz
+        tar -xz -C "${{ runner.temp }}/.depsdiver-bin" -f /tmp/diver.tar.gz diver
+        chmod +x "${{ runner.temp }}/.depsdiver-bin/diver"
+
+    - name: Restore diver FOCI cache
+      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      with:
+        path: ${{ runner.temp }}/.diver-cache
+        key: diver-cache-${{ runner.os }}-${{ github.run_id }}
         restore-keys: |
-          depsdiver-${{ runner.os }}-
+          diver-cache-${{ runner.os }}-
 
     - name: Scan dependencies for FOCI
       id: scan
       shell: bash
       env:
-        DEPSDIVER_TOKEN: ${{ inputs.depsdiver-token }}
+        DEPS_DIVER_API_TOKEN: ${{ inputs.depsdiver-token }}
+        DEPS_DIVER_URL: ${{ inputs.depsdiver-api-url }}
+        XDG_CACHE_HOME: "${{ runner.temp }}/.diver-cache"
         DEPSDIVER_API_URL: ${{ inputs.depsdiver-api-url }}
         FOCI_SUMMARY_FILE: "${{ github.workspace }}/foci-summary.txt"
         FOCI_THRESHOLD: ${{ inputs.foci-threshold }}
-        DEPSDIVER_CACHE_FILE: "${{ runner.temp }}/.depsdiver-cache/results.json"
         SCAN_PATH: "${{ github.workspace }}/${{ inputs.path }}"
+        DIVER_JSON: "${{ runner.temp }}/diver-result.json"
         OUTPUT_FILE: "${{ github.workspace }}/${{ inputs.output-file }}"
         REPORT_ARTIFACT_NAME: "${{ inputs.output-file }}"
       run: |
-        # Run the pre-built scanner binary (stderr goes to log, stdout to report)
-        "${{ runner.temp }}/.depsdiver-bin/scan-deps" "$SCAN_PATH" > "$OUTPUT_FILE"
+        # Run diver scan (stderr goes to log, stdout to JSON file)
+        "${{ runner.temp }}/.depsdiver-bin/diver" scan --output json "$SCAN_PATH" > "$DIVER_JSON"
+
+        # Format JSON into markdown report
+        "${{ runner.temp }}/.depsdiver-bin/scan-deps" "$DIVER_JSON" > "$OUTPUT_FILE"
 
         # Extract summary stats from the report
         if [ -f "$OUTPUT_FILE" ]; then
