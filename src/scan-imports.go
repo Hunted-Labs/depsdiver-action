@@ -76,7 +76,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Querying DepsDiver API for %d packages (%d cached)...\n", len(uncachedDeps), len(pkgManagerDeps)-len(uncachedDeps))
 
 		// Bulk query in chunks of 20
-		const chunkSize = 20
+		const chunkSize = 250
 		for i := 0; i < len(uncachedDeps); i += chunkSize {
 			end := i + chunkSize
 			if end > len(uncachedDeps) {
