@@ -99,15 +99,7 @@ func main() {
 				} else if info, ok := bulkResults[dep.Name]; ok {
 					pkgManagerResults[key] = info
 				} else {
-					// fall back to individual call
-					info, err := queryDepsDiverAPI(apiClient, depsDiverAPIURL, depsDiverToken, dep.Name, dep.Ecosystem)
-					if err != nil {
-						fmt.Fprintf(os.Stderr, "Warning: Failed to query API for %s: %v\n", dep.Name, err)
-						pkgManagerResults[key] = &PackageInfo{ImportPath: dep.Name, Error: err.Error()}
-					} else {
-						pkgManagerResults[key] = info
-					}
-					time.Sleep(25 * time.Millisecond)
+					pkgManagerResults[key] = &PackageInfo{ImportPath: dep.Name, Error: "package not found in API response"}
 				}
 			}
 		}
