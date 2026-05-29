@@ -75,8 +75,8 @@ func main() {
 	if depsDiverToken != "" && len(uncachedDeps) > 0 {
 		fmt.Fprintf(os.Stderr, "Querying DepsDiver API for %d packages (%d cached)...\n", len(uncachedDeps), len(pkgManagerDeps)-len(uncachedDeps))
 
-		// Bulk query in chunks of 20
-		const chunkSize = 20
+		// Bulk query in chunks of 250
+		const chunkSize = 250
 		for i := 0; i < len(uncachedDeps); i += chunkSize {
 			end := i + chunkSize
 			if end > len(uncachedDeps) {
@@ -99,15 +99,7 @@ func main() {
 				} else if info, ok := bulkResults[dep.Name]; ok {
 					pkgManagerResults[key] = info
 				} else {
-					// fall back to individual call
-					info, err := queryDepsDiverAPI(apiClient, depsDiverAPIURL, depsDiverToken, dep.Name, dep.Ecosystem)
-					if err != nil {
-						fmt.Fprintf(os.Stderr, "Warning: Failed to query API for %s: %v\n", dep.Name, err)
-						pkgManagerResults[key] = &PackageInfo{ImportPath: dep.Name, Error: err.Error()}
-					} else {
-						pkgManagerResults[key] = info
-					}
-					time.Sleep(25 * time.Millisecond)
+					pkgManagerResults[key] = &PackageInfo{ImportPath: dep.Name, Error: "package not found in API response"}
 				}
 			}
 		}
