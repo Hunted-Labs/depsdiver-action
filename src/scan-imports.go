@@ -38,7 +38,7 @@ func main() {
 		}
 	}
 	if depsDiverAPIURL == "" {
-		depsDiverAPIURL = "https://api.example.com" // default, should be overridden
+		depsDiverAPIURL = "https://depsdiver.com/api" // default
 	}
 
 	var pkgManagerDeps []PackageManagerDep
