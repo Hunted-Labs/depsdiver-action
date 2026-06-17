@@ -30,7 +30,7 @@ A GitHub Action that scans package manager files in your repository and queries 
 
 ### Basic Usage
 
-See `example` directory for a full example workflow.
+A checkout step is required before this action so the repository's files are available to scan. See the `example` directory for a full example workflow.
 
 ```yaml
 name: Scan Dependencies for FOCI
@@ -74,13 +74,13 @@ jobs:
         id: scan
         uses: Hunted-Labs/depsdiver-action@20953f2915b648144e30357e91a8a15eaa77cbf0 # v2.5.0
         with:
-          path: '.'                              # Directory to scan (default: '.')
+          path: '.'                              # Directory(ies) to scan (default: '.'). Accepts multiple, see below
           output-file: 'foci-report.txt'         # Report file name (default: 'deps-foci-report.txt')
           artifact-name: 'foci-report'           # Artifact name (default: 'deps-foci-report')
           artifact-retention-days: '7'           # Artifact retention (default: '30')
           depsdiver-api-url: 'https://depsdiver.com/api'
           depsdiver-token: ${{ secrets.DEPSDIVER_TOKEN }}
-          foci-threshold: '10'                   # Only flag packages with >10% FOCI change ratio
+          foci-threshold: '10'                   # Only flag packages with >10% FOCI
 
       - name: Fail if FOCI detected
         if: steps.scan.outputs.foci-packages > 0
@@ -104,7 +104,7 @@ For organization-wide access, use an organization secret instead.
 
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
-| `path` | Directory path to scan | No | `.` |
+| `path` | Directory path(s) to scan. Accepts a single path, or multiple paths separated by commas or newlines. | No | `.` |
 | `output-file` | Output file name for the report | No | `deps-foci-report.txt` |
 | `artifact-name` | Name of the uploaded artifact | No | `deps-foci-report` |
 | `artifact-retention-days` | Days to retain the artifact | No | `30` |
@@ -113,6 +113,38 @@ For organization-wide access, use an organization secret instead.
 | `foci-threshold` | FOCI change ratio threshold (0–100%). Only packages exceeding this are flagged. Leave empty to flag all packages with any FOCI data. | No | — |
 
 \* Without `depsdiver-api-url` and `depsdiver-token` the action will discover and list dependencies but won't query for FOCI data.
+
+### Understanding the FOCI threshold
+
+The **change ratio** is the fraction of a package's code changes that come from contributors linked to a country of concern. `foci-threshold` is that fraction expressed as a percentage (0–100):
+
+- **Leave it empty** to flag any package the API reports as having FOCI present.
+- **Set a number** (e.g. `10`) to flag only packages whose change ratio exceeds that percentage, reducing noise from packages with minimal foreign contribution.
+
+The number of packages above the threshold is exposed as the `foci-packages` output, which you can use to fail a build (see [Advanced Usage](#advanced-usage)).
+
+### Scanning multiple folders
+
+**Requires v2.6.0 or later.** Earlier versions accept only a single directory.
+
+The `path` input accepts more than one directory. Separate them with commas, or use a YAML block scalar for one per line. Each folder is scanned independently and the results are combined into a single report (duplicate packages found in more than one folder are de-duplicated).
+
+```yaml
+# Comma-separated
+- uses: Hunted-Labs/depsdiver-action@v2.6.0
+  with:
+    path: 'frontend, backend, services/api'
+
+# Or one per line
+- uses: Hunted-Labs/depsdiver-action@v2.6.0
+  with:
+    path: |
+      frontend
+      backend
+      services/api
+```
+
+Paths are resolved relative to the repository root, and files appear in the report with their folder prefix (e.g. `frontend/package.json`).
 
 ## Outputs
 
@@ -184,6 +216,20 @@ FOCI detected: 2
 No data available: 8
 Total repository FOCI locations: 3
 ```
+
+## Troubleshooting
+
+**"No package manager files found in the project"**
+The action couldn't find any supported manifest or lock files under the scanned `path`. Confirm that a checkout step runs before the action, that `path` points at the right directory (relative to the repository root), and that your ecosystem appears in [Supported Ecosystems](#supported-ecosystems).
+
+**Dependencies are listed but show no FOCI data**
+FOCI lookups require both `depsdiver-api-url` and `depsdiver-token`. Without them the action only discovers and lists dependencies. Verify the `DEPSDIVER_TOKEN` secret is set on the repository (or organization) and that the workflow references it correctly.
+
+**Packages show "no data available"**
+The package was queried successfully but DepsDiver has no FOCI record for it (for example, a package it hasn't analyzed yet). This is expected and not an error.
+
+**A folder isn't being scanned**
+When passing multiple folders, separate them with commas or newlines and make each path relative to the repository root. Note that `vendor/`, `.git/`, `node_modules/`, `target/`, `build/`, `dist/`, `.idea/`, and `__pycache__/` are skipped automatically.
 
 ## Versioning
 

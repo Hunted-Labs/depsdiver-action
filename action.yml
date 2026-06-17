@@ -5,7 +5,7 @@ branding:
   color: "blue"
 inputs:
   path:
-    description: "Directory path to scan (default: repository root)"
+    description: "Directory path(s) to scan (default: repository root). Accepts a single path, or multiple paths separated by commas or newlines."
     required: false
     default: "."
   output-file:
@@ -87,12 +87,28 @@ runs:
         FOCI_SUMMARY_FILE: "${{ github.workspace }}/foci-summary.txt"
         FOCI_THRESHOLD: ${{ inputs.foci-threshold }}
         DEPSDIVER_CACHE_FILE: "${{ runner.temp }}/.depsdiver-cache/results.json"
-        SCAN_PATH: "${{ github.workspace }}/${{ inputs.path }}"
+        SCAN_PATHS: ${{ inputs.path }}
+        SCAN_BASE_DIR: "${{ github.workspace }}"
         OUTPUT_FILE: "${{ github.workspace }}/${{ inputs.output-file }}"
         REPORT_ARTIFACT_NAME: "${{ inputs.output-file }}"
       run: |
+        # Build the list of directories to scan. The `path` input may contain a
+        # single path, or several separated by commas and/or newlines.
+        declare -a PATH_ARGS=()
+        while IFS= read -r raw; do
+          # Trim surrounding whitespace
+          p="$(printf '%s' "$raw" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          [ -z "$p" ] && continue
+          PATH_ARGS+=("${SCAN_BASE_DIR}/${p}")
+        done < <(printf '%s\n' "$SCAN_PATHS" | tr ',' '\n')
+
+        # Fall back to the repository root if no paths were provided
+        if [ ${#PATH_ARGS[@]} -eq 0 ]; then
+          PATH_ARGS+=("$SCAN_BASE_DIR")
+        fi
+
         # Run the pre-built scanner binary (stderr goes to log, stdout to report)
-        "${{ runner.temp }}/.depsdiver-bin/scan-deps" "$SCAN_PATH" > "$OUTPUT_FILE"
+        "${{ runner.temp }}/.depsdiver-bin/scan-deps" "${PATH_ARGS[@]}" > "$OUTPUT_FILE"
 
         # Extract summary stats from the report
         if [ -f "$OUTPUT_FILE" ]; then

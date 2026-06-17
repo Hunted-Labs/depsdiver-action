@@ -16,11 +16,15 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "Usage: %s <directory>\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s <directory> [<directory>...]\n", os.Args[0])
 		os.Exit(1)
 	}
 
-	rootDir := os.Args[1]
+	scanDirs := os.Args[1:]
+
+	// Keeps multiple roots distinguishable (i.e.
+	// "dir1/package.json" vs "dir2/package.json")
+	baseDir := os.Getenv("SCAN_BASE_DIR")
 
 	// Get DepsDiver API configuration from environment
 	depsDiverToken := os.Getenv("DEPSDIVER_TOKEN")
@@ -37,7 +41,26 @@ func main() {
 		depsDiverAPIURL = "https://api.example.com" // default, should be overridden
 	}
 
-	pkgManagerDeps, _ := scanPackageManagerFiles(rootDir)
+	var pkgManagerDeps []PackageManagerDep
+	for _, dir := range scanDirs {
+		// use absolute paths so reported file paths are consistent
+		absDir, err := filepath.Abs(dir)
+		if err != nil {
+			absDir = dir
+		}
+		base := baseDir
+		if base == "" {
+			base = absDir
+		} else if absBase, err := filepath.Abs(base); err == nil {
+			base = absBase
+		}
+		deps, err := scanPackageManagerFiles(absDir, base)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to scan %q: %v\n", dir, err)
+			continue
+		}
+		pkgManagerDeps = append(pkgManagerDeps, deps...)
+	}
 	pkgManagerDeps = dedupePkgManagerDeps(pkgManagerDeps)
 
 	pkgManagerResults := make(map[string]*PackageInfo)

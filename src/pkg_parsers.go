@@ -49,8 +49,9 @@ var lockSupersedes = map[string][]string{
 }
 
 // walks rootDir and parses all package manager files, skipping manifests when
-// a corresponding lock file exists in the same dir
-func scanPackageManagerFiles(rootDir string) ([]PackageManagerDep, error) {
+// a corresponding lock file exists in the same dir. File paths are reported
+// relative to the baseDir
+func scanPackageManagerFiles(rootDir, baseDir string) ([]PackageManagerDep, error) {
 	// Pass 1: collect all package manager file paths
 	var allPaths []string
 	err := filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
@@ -102,7 +103,7 @@ func scanPackageManagerFiles(rootDir string) ([]PackageManagerDep, error) {
 		if skipPaths[path] {
 			continue
 		}
-		relPath, _ := filepath.Rel(rootDir, path)
+		relPath, _ := filepath.Rel(baseDir, path)
 		content, readErr := os.ReadFile(path)
 		if readErr != nil {
 			continue
