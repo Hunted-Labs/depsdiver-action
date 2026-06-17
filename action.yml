@@ -35,10 +35,13 @@ inputs:
 outputs:
   report-file:
     description: "Path to the generated report file"
+    value: ${{ steps.scan.outputs.report-file }}
   total-packages:
     description: "Total number of dependencies found across all package manager files"
+    value: ${{ steps.scan.outputs.total-packages }}
   foci-packages:
     description: "Number of packages with FOCI detected"
+    value: ${{ steps.scan.outputs.foci-packages }}
 runs:
   using: "composite"
   steps:
