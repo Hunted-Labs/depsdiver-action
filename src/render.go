@@ -482,14 +482,8 @@ func renderReport(pkgManagerDeps []PackageManagerDep, pkgManagerResults map[stri
 	}
 }
 
-// multiCountryCutoff is the total foreign-contribution percentage above which
-// we surface the multi-country disclaimer. It sits just above 100% so ordinary
-// rounding noise at exactly 100% doesn't trigger it.
 const multiCountryCutoff = 100.05
 
-// multiCountryDisclaimer explains why a package's total foreign contribution can
-// exceed 100% (a contributor associated with more than one country is counted
-// for each). Mirrors the disclaimer shown in the DepsDiver UI.
 const multiCountryDisclaimer = "Some users are associated with multiple countries, making it impossible to definitively attribute their contributions to a single location. This can occur when users live in one country and work remotely for another, or when they frequently travel between countries. To provide the most comprehensive view of activity, contributions are counted for all relevant countries, which may cause country-level percentages to exceed 100% in some cases."
 
 // renders the FOCI-flagged packages as a single table, sorted by
@@ -526,7 +520,7 @@ func writeFociTriageTable(w *os.File, pkgManagerDeps []PackageManagerDep, result
 		return rows[i].result.ChangeRatio > rows[j].result.ChangeRatio
 	})
 
-	// rows are sorted highest-first, so any package over 100% is at the very top.
+	// rows are sorted highest-first
 	anyOverHundred := rows[0].result.ChangeRatio*100 > multiCountryCutoff
 
 	writeRow := func(r fociRow) {
@@ -546,8 +540,7 @@ func writeFociTriageTable(w *os.File, pkgManagerDeps []PackageManagerDep, result
 
 	header := "<table>\n<tr><th>Package</th><th>Ecosystem</th><th>Foreign contribution</th><th>FOCI countries</th><th>Repository</th></tr>\n"
 
-	// Disclaimer goes ABOVE the table: the >100% packages sort to the top, so the
-	// explanation has to be the first thing the reader sees, not buried below.
+	// Disclaimer above the table
 	if anyOverHundred {
 		fmt.Fprintf(w, "<blockquote>⚠️ <strong>Some percentages exceed 100%% (marked with * below):</strong> %s</blockquote>\n\n", multiCountryDisclaimer)
 	}
@@ -573,9 +566,8 @@ func writeFociTriageTable(w *os.File, pkgManagerDeps []PackageManagerDep, result
 	}
 }
 
-// fociCountries formats the FOCI-flagged countries for a package as a compact
-// "Country pct, …" string for the triage table, highest contribution first.
-// Caps at maxShown countries with a "+N more" suffix to keep cells readable.
+// formats the FOCI-flagged countries as "Country pct, …" string for the table. 
+// Caps at maxShown countries with a "+N more"
 func fociCountries(result *PackageInfo) string {
 	const maxShown = 3
 	type countryContribution struct {
