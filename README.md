@@ -1,8 +1,8 @@
 # DepsDiver Dependency FOCI Scanner
 
-A GitHub Action that scans package manager files in your repository and queries the [DepsDiver](https://huntedlabs.com) API to detect Foreign Ownership, Control, or Influence (FOCI) in your dependencies.
+A GitHub Action that scans package manager files in your repository and detects Foreign Ownership, Control, or Influence (FOCI) in your dependencies.
 
-Scanning is performed by the [`diver`](https://huntedlabs.com) CLI. The action downloads a pinned `diver` release at runtime (cached between runs) and formats its results into a GitHub report.
+Scanning is performed by the [`diver`](https://huntedlabs.com/diver-cli) CLI. The action downloads a pinned `diver` release at runtime (cached between runs) and formats its results into a GitHub report.
 
 ## Features
 
