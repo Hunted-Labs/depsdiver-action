@@ -362,6 +362,7 @@ func renderReport(pkgManagerDeps []PackageManagerDep, pkgManagerResults map[stri
 				fmt.Fprintf(fociSummary, " · %d no data available", packagesNotFound)
 			}
 			fmt.Fprintf(fociSummary, "\n\n")
+			writeFociTriageTable(fociSummary, pkgManagerDeps, pkgManagerResults, fociThreshold, depsDiverAPIURL)
 		}
 
 		for _, dep := range pkgManagerDeps {
@@ -423,52 +424,6 @@ func renderReport(pkgManagerDeps []PackageManagerDep, pkgManagerResults map[stri
 				fmt.Println()
 			}
 			fmt.Println()
-
-			if fociSummary != nil && result.FociPresent {
-				encodedPackageHTML := url.QueryEscape(dep.Name)
-				baseURLHTML := strings.TrimSuffix(depsDiverAPIURL, "/api")
-				reportURLHTML := fmt.Sprintf("%s/analyze/%s?ecosystem=%s#overview", baseURLHTML, encodedPackageHTML, dep.Ecosystem)
-
-				fmt.Fprintf(fociSummary, "<details>\n")
-				fmt.Fprintf(fociSummary, "<summary><strong><code>%s</code></strong> (%s)", dep.Name, dep.Ecosystem)
-				if result.Owner != "" && result.Name != "" {
-					fmt.Fprintf(fociSummary, " — <code>%s/%s</code>", result.Owner, result.Name)
-				}
-				fmt.Fprintf(fociSummary, " — %s foreign contribution</summary>\n\n", formatPct(result.ChangeRatio))
-				fmt.Fprintf(fociSummary, "<p>🔗 <a href=\"%s\"><strong>View Full Report on Hunted Labs</strong></a></p>\n\n", reportURLHTML)
-
-				if result.ChangeRatio*100 > multiCountryCutoff {
-					fmt.Fprintf(fociSummary, "<blockquote>⚠️ <strong>Note on percentages over 100%%:</strong> %s</blockquote>\n\n", multiCountryDisclaimer)
-				}
-
-				if len(result.FociStats) > 0 {
-					fmt.Fprintf(fociSummary, "<table>\n<tr><th>Country</th><th>Contribution</th><th>Risk</th></tr>\n")
-					for _, stat := range result.FociStats {
-						if stat.FociPresent && stat.CountryName != "" {
-							fmt.Fprintf(fociSummary, "<tr><td>%s</td><td>%s</td><td>⚠️ FOCI</td></tr>\n", stat.CountryName, formatPct(stat.ChangeRatio))
-						}
-					}
-					fmt.Fprintf(fociSummary, "</table>\n\n")
-				}
-
-				if len(result.RepositoryFoci) > 0 {
-					fmt.Fprintf(fociSummary, "<p><strong>Repository FOCI (%d):</strong></p>\n<ul>\n", len(result.RepositoryFoci))
-					for _, loc := range result.RepositoryFoci {
-						if loc.CountryName != "" {
-							line := fmt.Sprintf("<strong>%s</strong>", loc.CountryName)
-							if loc.OrganizationName != "" {
-								line += fmt.Sprintf(" — %s", loc.OrganizationName)
-							}
-							if loc.Reason != "" {
-								line += fmt.Sprintf(" <em>(%s)</em>", loc.Reason)
-							}
-							fmt.Fprintf(fociSummary, "<li>%s</li>\n", line)
-						}
-					}
-					fmt.Fprintf(fociSummary, "</ul>\n\n")
-				}
-				fmt.Fprintf(fociSummary, "</details>\n\n")
-			}
 		}
 	}
 
@@ -536,6 +491,84 @@ const multiCountryCutoff = 100.05
 // exceed 100% (a contributor associated with more than one country is counted
 // for each). Mirrors the disclaimer shown in the DepsDiver UI.
 const multiCountryDisclaimer = "Some users are associated with multiple countries, making it impossible to definitively attribute their contributions to a single location. This can occur when users live in one country and work remotely for another, or when they frequently travel between countries. To provide the most comprehensive view of activity, contributions are counted for all relevant countries, which may cause country-level percentages to exceed 100% in some cases."
+
+// renders the FOCI-flagged packages as a single table, sorted by
+// foreign contribution (highest first), remainder go in a collapsed
+// "view more" section
+func writeFociTriageTable(w *os.File, pkgManagerDeps []PackageManagerDep, results map[string]*PackageInfo, fociThreshold float64, apiURL string) {
+	const triageTopN = 30
+
+	type fociRow struct {
+		dep    PackageManagerDep
+		result *PackageInfo
+	}
+	var rows []fociRow
+	for _, dep := range pkgManagerDeps {
+		key := dep.Ecosystem + ":" + dep.Name
+		result, ok := results[key]
+		if !ok || result.Error != "" {
+			continue
+		}
+		isFoci := result.FociPresent
+		if fociThreshold >= 0 {
+			isFoci = result.ChangeRatio*100 > fociThreshold
+		}
+		if isFoci {
+			rows = append(rows, fociRow{dep, result})
+		}
+	}
+	if len(rows) == 0 {
+		return
+	}
+
+	// Highest contribution first
+	sort.SliceStable(rows, func(i, j int) bool {
+		return rows[i].result.ChangeRatio > rows[j].result.ChangeRatio
+	})
+
+	anyOverHundred := false
+	writeRow := func(r fociRow) {
+		pctText := formatPct(r.result.ChangeRatio)
+		if r.result.ChangeRatio*100 > multiCountryCutoff {
+			pctText += " *"
+			anyOverHundred = true
+		}
+		encoded := url.QueryEscape(r.dep.Name)
+		reportURL := fmt.Sprintf("%s/analyze/%s?ecosystem=%s#overview", strings.TrimSuffix(apiURL, "/api"), encoded, r.dep.Ecosystem)
+		repo := "—"
+		if r.result.Owner != "" && r.result.Name != "" {
+			repo = fmt.Sprintf("<code>%s/%s</code>", r.result.Owner, r.result.Name)
+		}
+		fmt.Fprintf(w, "<tr><td><a href=\"%s\"><code>%s</code></a></td><td>%s</td><td>%s</td><td>%s</td></tr>\n",
+			reportURL, r.dep.Name, r.dep.Ecosystem, pctText, repo)
+	}
+
+	header := "<table>\n<tr><th>Package</th><th>Ecosystem</th><th>Foreign contribution</th><th>Repository</th></tr>\n"
+
+	fmt.Fprintf(w, "<p><strong>⚠️ Dependencies with foreign contribution</strong> (highest first)</p>\n\n")
+	fmt.Fprintf(w, "%s", header)
+	top := rows
+	if len(top) > triageTopN {
+		top = rows[:triageTopN]
+	}
+	for _, r := range top {
+		writeRow(r)
+	}
+	fmt.Fprintf(w, "</table>\n\n")
+
+	if len(rows) > triageTopN {
+		fmt.Fprintf(w, "<details>\n<summary>View remaining %d FOCI packages</summary>\n\n", len(rows)-triageTopN)
+		fmt.Fprintf(w, "%s", header)
+		for _, r := range rows[triageTopN:] {
+			writeRow(r)
+		}
+		fmt.Fprintf(w, "</table>\n\n</details>\n\n")
+	}
+
+	if anyOverHundred {
+		fmt.Fprintf(w, "<blockquote>⚠️ <strong>* Percentages over 100%%:</strong> %s</blockquote>\n\n", multiCountryDisclaimer)
+	}
+}
 
 func getCurrentTime() string {
 	return time.Now().UTC().Format("2006-01-02 15:04:05 UTC")
