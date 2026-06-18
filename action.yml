@@ -88,28 +88,13 @@ runs:
         path: ${{ runner.temp }}/.diver-bin
         key: diver-cli-${{ runner.os }}-${{ runner.arch }}-${{ inputs.diver-version }}
 
-    # --- Build the tiny JSON report renderer (cached) ---
-    - name: Restore renderer cache
-      id: renderer-cache
-      uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
-      with:
-        path: ${{ runner.temp }}/.depsdiver-bin
-        key: depsdiver-render-${{ runner.os }}-${{ github.action_ref }}
-
+    # --- Build the tiny JSON report renderer ---
     - name: Build renderer
-      if: steps.renderer-cache.outputs.cache-hit != 'true'
       shell: bash
       run: |
         mkdir -p "${{ runner.temp }}/.depsdiver-bin"
         cd "${{ github.action_path }}"
         go build -o "${{ runner.temp }}/.depsdiver-bin/render" src/render.go
-
-    - name: Save renderer cache
-      if: steps.renderer-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
-      with:
-        path: ${{ runner.temp }}/.depsdiver-bin
-        key: depsdiver-render-${{ runner.os }}-${{ github.action_ref }}
 
     - name: Restore DepsDiver cache
       uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
