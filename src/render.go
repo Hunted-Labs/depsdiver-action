@@ -392,6 +392,10 @@ func renderReport(pkgManagerDeps []PackageManagerDep, pkgManagerResults map[stri
 			}
 			fmt.Printf("**Total Foreign Contribution:** %s\n\n", formatPct(result.ChangeRatio))
 
+			if result.ChangeRatio*100 > multiCountryCutoff {
+				fmt.Printf("> **Note:** %s\n\n", multiCountryDisclaimer)
+			}
+
 			if len(result.FociStats) > 0 {
 				fmt.Println("**Countries of Concern:**")
 				for _, stat := range result.FociStats {
@@ -432,6 +436,10 @@ func renderReport(pkgManagerDeps []PackageManagerDep, pkgManagerResults map[stri
 				}
 				fmt.Fprintf(fociSummary, " — %s foreign contribution</summary>\n\n", formatPct(result.ChangeRatio))
 				fmt.Fprintf(fociSummary, "<p>🔗 <a href=\"%s\"><strong>View Full Report on Hunted Labs</strong></a></p>\n\n", reportURLHTML)
+
+				if result.ChangeRatio*100 > multiCountryCutoff {
+					fmt.Fprintf(fociSummary, "<blockquote>⚠️ <strong>Note on percentages over 100%%:</strong> %s</blockquote>\n\n", multiCountryDisclaimer)
+				}
 
 				if len(result.FociStats) > 0 {
 					fmt.Fprintf(fociSummary, "<table>\n<tr><th>Country</th><th>Contribution</th><th>Risk</th></tr>\n")
@@ -518,6 +526,16 @@ func renderReport(pkgManagerDeps []PackageManagerDep, pkgManagerResults map[stri
 		fmt.Printf("Packages above threshold: %d\n", fociPresentCount)
 	}
 }
+
+// multiCountryCutoff is the total foreign-contribution percentage above which
+// we surface the multi-country disclaimer. It sits just above 100% so ordinary
+// rounding noise at exactly 100% doesn't trigger it.
+const multiCountryCutoff = 100.05
+
+// multiCountryDisclaimer explains why a package's total foreign contribution can
+// exceed 100% (a contributor associated with more than one country is counted
+// for each). Mirrors the disclaimer shown in the DepsDiver UI.
+const multiCountryDisclaimer = "Some users are associated with multiple countries, making it impossible to definitively attribute their contributions to a single location. This can occur when users live in one country and work remotely for another, or when they frequently travel between countries. To provide the most comprehensive view of activity, contributions are counted for all relevant countries, which may cause country-level percentages to exceed 100% in some cases."
 
 func getCurrentTime() string {
 	return time.Now().UTC().Format("2006-01-02 15:04:05 UTC")
