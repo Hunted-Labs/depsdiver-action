@@ -1,11 +1,11 @@
 name: "DepsDiver Dependency FOCI Scanner"
-description: "Scan package manager files and query DepsDiver to detect FOCI in your dependencies"
+description: "Scan package manager files with the diver CLI and detect FOCI in your dependencies"
 branding:
   icon: "search"
   color: "blue"
 inputs:
   path:
-    description: "Directory path to scan (default: repository root)"
+    description: "Directory path(s) to scan (default: repository root). Accepts a single path, or multiple paths separated by commas or newlines."
     required: false
     default: "."
   output-file:
@@ -23,22 +23,28 @@ inputs:
   depsdiver-api-url:
     description: "DepsDiver API base URL (e.g., https://depsdiver.com/api)"
     required: false
-    default: ""
+    default: "https://depsdiver.com/api"
   depsdiver-token:
     description: "DepsDiver API token (should be set as secret)"
-    required: false
-    default: ""
+    required: true
   foci-threshold:
     description: "FOCI change ratio threshold (0-100). Only packages whose change_ratio exceeds this percentage are included in the FOCI report section. Leave empty to include all packages with any FOCI data."
     required: false
     default: ""
+  diver-version:
+    description: "Version of the diver CLI to download"
+    required: false
+    default: "0.3.0"
 outputs:
   report-file:
     description: "Path to the generated report file"
+    value: ${{ steps.scan.outputs.report-file }}
   total-packages:
     description: "Total number of dependencies found across all package manager files"
+    value: ${{ steps.scan.outputs.total-packages }}
   foci-packages:
     description: "Number of packages with FOCI detected"
+    value: ${{ steps.scan.outputs.foci-packages }}
 runs:
   using: "composite"
   steps:
@@ -48,27 +54,62 @@ runs:
         go-version: "1.26.0"
         cache: false
 
-    - name: Restore DepsDiver binary cache
-      id: binary-cache
+    # --- Download the diver CLI from the public bucket (cached by version+arch) ---
+    - name: Restore diver binary cache
+      id: diver-cache
+      uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      with:
+        path: ${{ runner.temp }}/.diver-bin
+        key: diver-cli-${{ runner.os }}-${{ runner.arch }}-${{ inputs.diver-version }}
+
+    - name: Download diver
+      if: steps.diver-cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        DIVER_VERSION: ${{ inputs.diver-version }}
+      run: |
+        set -euo pipefail
+        case "$(uname -m)" in
+          x86_64)            ARCH="x86_64" ;;
+          aarch64 | arm64)   ARCH="arm64" ;;
+          *) echo "::error::unsupported arch $(uname -m)"; exit 1 ;;
+        esac
+        mkdir -p "${{ runner.temp }}/.diver-bin"
+        URL="https://hl-tools.s3.us-east-1.amazonaws.com/diver/${DIVER_VERSION}/diver_v${DIVER_VERSION}_Linux_${ARCH}.tar.gz"
+        echo "Downloading $URL"
+        curl -fSL "$URL" -o "${{ runner.temp }}/diver.tar.gz"
+        tar -xzf "${{ runner.temp }}/diver.tar.gz" -C "${{ runner.temp }}/.diver-bin" diver
+        chmod +x "${{ runner.temp }}/.diver-bin/diver"
+
+    - name: Save diver binary cache
+      if: steps.diver-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      with:
+        path: ${{ runner.temp }}/.diver-bin
+        key: diver-cli-${{ runner.os }}-${{ runner.arch }}-${{ inputs.diver-version }}
+
+    # --- Build the tiny JSON report renderer (cached) ---
+    - name: Restore renderer cache
+      id: renderer-cache
       uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         path: ${{ runner.temp }}/.depsdiver-bin
-        key: depsdiver-bin-${{ runner.os }}-${{ github.action_ref }}
+        key: depsdiver-render-${{ runner.os }}-${{ github.action_ref }}
 
-    - name: Build scanner
-      if: steps.binary-cache.outputs.cache-hit != 'true'
+    - name: Build renderer
+      if: steps.renderer-cache.outputs.cache-hit != 'true'
       shell: bash
       run: |
         mkdir -p "${{ runner.temp }}/.depsdiver-bin"
         cd "${{ github.action_path }}"
-        go build -o "${{ runner.temp }}/.depsdiver-bin/scan-deps" src/scan-imports.go src/pkg_parsers.go
+        go build -o "${{ runner.temp }}/.depsdiver-bin/render" src/render.go
 
-    - name: Save DepsDiver binary cache
-      if: steps.binary-cache.outputs.cache-hit != 'true'
+    - name: Save renderer cache
+      if: steps.renderer-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         path: ${{ runner.temp }}/.depsdiver-bin
-        key: depsdiver-bin-${{ runner.os }}-${{ github.action_ref }}
+        key: depsdiver-render-${{ runner.os }}-${{ github.action_ref }}
 
     - name: Restore DepsDiver cache
       uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
@@ -82,25 +123,57 @@ runs:
       id: scan
       shell: bash
       env:
-        DEPSDIVER_TOKEN: ${{ inputs.depsdiver-token }}
+        DEPS_DIVER_API_TOKEN: ${{ inputs.depsdiver-token }}
         DEPSDIVER_API_URL: ${{ inputs.depsdiver-api-url }}
+        XDG_CACHE_HOME: "${{ runner.temp }}/.depsdiver-cache"
         FOCI_SUMMARY_FILE: "${{ github.workspace }}/foci-summary.txt"
         FOCI_THRESHOLD: ${{ inputs.foci-threshold }}
-        DEPSDIVER_CACHE_FILE: "${{ runner.temp }}/.depsdiver-cache/results.json"
-        SCAN_PATH: "${{ github.workspace }}/${{ inputs.path }}"
+        SCAN_PATHS: ${{ inputs.path }}
+        SCAN_BASE_DIR: "${{ github.workspace }}"
         OUTPUT_FILE: "${{ github.workspace }}/${{ inputs.output-file }}"
         REPORT_ARTIFACT_NAME: "${{ inputs.output-file }}"
       run: |
-        # Run the pre-built scanner binary (stderr goes to log, stdout to report)
-        "${{ runner.temp }}/.depsdiver-bin/scan-deps" "$SCAN_PATH" > "$OUTPUT_FILE"
+        set -euo pipefail
+        DIVER="${{ runner.temp }}/.diver-bin/diver"
+        RENDER="${{ runner.temp }}/.depsdiver-bin/render"
 
-        # Extract summary stats from the report
+        if [ -z "${DEPS_DIVER_API_TOKEN}" ]; then
+          echo "::error::depsdiver-token is required — diver cannot scan without an API token"
+          exit 1
+        fi
+
+        # Parse the path input (single path, or comma/newline-separated list)
+        # into a newline-delimited folders file (order preserved).
+        JSON_DIR="${{ runner.temp }}/diver-json"
+        FOLDERS_FILE="${{ runner.temp }}/diver-folders.txt"
+        mkdir -p "$JSON_DIR"
+        : > "$FOLDERS_FILE"
+        while IFS= read -r raw; do
+          p="$(printf '%s' "$raw" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          [ -z "$p" ] && continue
+          printf '%s\n' "$p" >> "$FOLDERS_FILE"
+        done < <(printf '%s\n' "$SCAN_PATHS" | tr ',' '\n')
+        if [ ! -s "$FOLDERS_FILE" ]; then printf '.\n' > "$FOLDERS_FILE"; fi
+
+        # Run diver per folder; write JSON as 0.json, 1.json, ... (paired by line).
+        i=0
+        while IFS= read -r folder; do
+          echo "Scanning $folder ..."
+          # diver logs to stderr; JSON to stdout. Strip any stray log lines.
+          "$DIVER" scan "${SCAN_BASE_DIR}/${folder}" --output json --url "$DEPSDIVER_API_URL" 2>/dev/null \
+            | grep -vE '^(WARN|INFO|ERROR|DEBUG)[[:space:]]' > "$JSON_DIR/$i.json"
+          i=$((i+1))
+        done < "$FOLDERS_FILE"
+
+        # Render the report (stdout) + step summary file.
+        "$RENDER" "$FOLDERS_FILE" "$JSON_DIR" > "$OUTPUT_FILE"
+
         if [ -f "$OUTPUT_FILE" ]; then
           TOTAL=$(grep -E "^Package manager dependencies found:" "$OUTPUT_FILE" | grep -oE '[0-9]+' || echo "0")
           FOCI=$(grep -E "^FOCI detected:" "$OUTPUT_FILE" | grep -oE '[0-9]+' || echo "0")
-          echo "total-packages=$TOTAL" >> $GITHUB_OUTPUT
-          echo "foci-packages=$FOCI" >> $GITHUB_OUTPUT
-          echo "report-file=$REPORT_ARTIFACT_NAME" >> $GITHUB_OUTPUT
+          echo "total-packages=$TOTAL" >> "$GITHUB_OUTPUT"
+          echo "foci-packages=$FOCI" >> "$GITHUB_OUTPUT"
+          echo "report-file=$REPORT_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
         fi
 
         cat "$OUTPUT_FILE"
