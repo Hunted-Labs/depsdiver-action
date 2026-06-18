@@ -526,12 +526,13 @@ func writeFociTriageTable(w *os.File, pkgManagerDeps []PackageManagerDep, result
 		return rows[i].result.ChangeRatio > rows[j].result.ChangeRatio
 	})
 
-	anyOverHundred := false
+	// rows are sorted highest-first, so any package over 100% is at the very top.
+	anyOverHundred := rows[0].result.ChangeRatio*100 > multiCountryCutoff
+
 	writeRow := func(r fociRow) {
 		pctText := formatPct(r.result.ChangeRatio)
 		if r.result.ChangeRatio*100 > multiCountryCutoff {
 			pctText += " *"
-			anyOverHundred = true
 		}
 		encoded := url.QueryEscape(r.dep.Name)
 		reportURL := fmt.Sprintf("%s/analyze/%s?ecosystem=%s#overview", strings.TrimSuffix(apiURL, "/api"), encoded, r.dep.Ecosystem)
@@ -539,11 +540,17 @@ func writeFociTriageTable(w *os.File, pkgManagerDeps []PackageManagerDep, result
 		if r.result.Owner != "" && r.result.Name != "" {
 			repo = fmt.Sprintf("<code>%s/%s</code>", r.result.Owner, r.result.Name)
 		}
-		fmt.Fprintf(w, "<tr><td><a href=\"%s\"><code>%s</code></a></td><td>%s</td><td>%s</td><td>%s</td></tr>\n",
-			reportURL, r.dep.Name, r.dep.Ecosystem, pctText, repo)
+		fmt.Fprintf(w, "<tr><td><a href=\"%s\"><code>%s</code></a></td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>\n",
+			reportURL, r.dep.Name, r.dep.Ecosystem, pctText, fociCountries(r.result), repo)
 	}
 
-	header := "<table>\n<tr><th>Package</th><th>Ecosystem</th><th>Foreign contribution</th><th>Repository</th></tr>\n"
+	header := "<table>\n<tr><th>Package</th><th>Ecosystem</th><th>Foreign contribution</th><th>FOCI countries</th><th>Repository</th></tr>\n"
+
+	// Disclaimer goes ABOVE the table: the >100% packages sort to the top, so the
+	// explanation has to be the first thing the reader sees, not buried below.
+	if anyOverHundred {
+		fmt.Fprintf(w, "<blockquote>⚠️ <strong>Some percentages exceed 100%% (marked with * below):</strong> %s</blockquote>\n\n", multiCountryDisclaimer)
+	}
 
 	fmt.Fprintf(w, "<p><strong>⚠️ Dependencies with foreign contribution</strong> (highest first)</p>\n\n")
 	fmt.Fprintf(w, "%s", header)
@@ -564,10 +571,40 @@ func writeFociTriageTable(w *os.File, pkgManagerDeps []PackageManagerDep, result
 		}
 		fmt.Fprintf(w, "</table>\n\n</details>\n\n")
 	}
+}
 
-	if anyOverHundred {
-		fmt.Fprintf(w, "<blockquote>⚠️ <strong>* Percentages over 100%%:</strong> %s</blockquote>\n\n", multiCountryDisclaimer)
+// fociCountries formats the FOCI-flagged countries for a package as a compact
+// "Country pct, …" string for the triage table, highest contribution first.
+// Caps at maxShown countries with a "+N more" suffix to keep cells readable.
+func fociCountries(result *PackageInfo) string {
+	const maxShown = 3
+	type countryContribution struct {
+		name  string
+		ratio float64
 	}
+	var ccs []countryContribution
+	for _, s := range result.FociStats {
+		if s.FociPresent && s.CountryName != "" {
+			ccs = append(ccs, countryContribution{s.CountryName, s.ChangeRatio})
+		}
+	}
+	if len(ccs) == 0 {
+		return "—"
+	}
+	sort.SliceStable(ccs, func(i, j int) bool { return ccs[i].ratio > ccs[j].ratio })
+
+	var parts []string
+	for i, c := range ccs {
+		if i >= maxShown {
+			break
+		}
+		parts = append(parts, fmt.Sprintf("%s %s", c.name, formatPct(c.ratio)))
+	}
+	out := strings.Join(parts, ", ")
+	if len(ccs) > maxShown {
+		out += fmt.Sprintf(", +%d more", len(ccs)-maxShown)
+	}
+	return out
 }
 
 func getCurrentTime() string {
