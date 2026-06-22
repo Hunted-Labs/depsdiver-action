@@ -57,7 +57,7 @@ runs:
     # --- Download the diver CLI from the public bucket (cached by version+arch) ---
     - name: Restore diver binary cache
       id: diver-cache
-      uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: ${{ runner.temp }}/.diver-bin
         key: diver-cli-${{ runner.os }}-${{ runner.arch }}-${{ inputs.diver-version }}
@@ -83,7 +83,7 @@ runs:
 
     - name: Save diver binary cache
       if: steps.diver-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: ${{ runner.temp }}/.diver-bin
         key: diver-cli-${{ runner.os }}-${{ runner.arch }}-${{ inputs.diver-version }}
@@ -97,7 +97,7 @@ runs:
         go build -o "${{ runner.temp }}/.depsdiver-bin/render" src/render.go
 
     - name: Restore DepsDiver cache
-      uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: ${{ runner.temp }}/.depsdiver-cache
         key: depsdiver-${{ runner.os }}-${{ github.run_id }}
@@ -165,7 +165,7 @@ runs:
         cat "$OUTPUT_FILE"
 
     - name: Save DepsDiver cache
-      uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       if: always()
       with:
         path: ${{ runner.temp }}/.depsdiver-cache
@@ -173,7 +173,7 @@ runs:
 
     - name: Upload import report
       if: always()
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: ${{ inputs.artifact-name }}
         path: ${{ github.workspace }}/${{ inputs.output-file }}
