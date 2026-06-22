@@ -110,6 +110,7 @@ runs:
       env:
         DEPS_DIVER_API_TOKEN: ${{ inputs.depsdiver-token }}
         DEPSDIVER_API_URL: ${{ inputs.depsdiver-api-url }}
+        DEPS_DIVER_SOURCE: "github-action"
         XDG_CACHE_HOME: "${{ runner.temp }}/.depsdiver-cache"
         FOCI_SUMMARY_FILE: "${{ github.workspace }}/foci-summary.txt"
         FOCI_THRESHOLD: ${{ inputs.foci-threshold }}
