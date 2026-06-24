@@ -1,7 +1,8 @@
 name: DepsDiver Example
 
 # This is an example workflow showing how to use this action in another repository
-# To use this action in your repository, copy the job below to your workflow
+# To use this action in your repository, copy the job below to your workflow. You 
+# may want to update the sha hash to match the lastest version release. 
 
 on:
   workflow_dispatch:
@@ -17,7 +18,7 @@ jobs:
 
       - name: Scan Go imports
         id: scan
-        uses: Hunted-Labs/depsdiver-action@20953f2915b648144e30357e91a8a15eaa77cbf0 # v2.5.0
+        uses: Hunted-Labs/depsdiver-action@2cc75599f7397cfcc2b42db0c4d4c34784b10338 # v2.5.3
         with:
           path: "."
           output-file: "go-imports-report.txt"

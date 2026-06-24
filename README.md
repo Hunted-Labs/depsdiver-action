@@ -51,7 +51,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Scan dependencies
-        uses: Hunted-Labs/depsdiver-action@20953f2915b648144e30357e91a8a15eaa77cbf0 # v2.5.0
+        uses: Hunted-Labs/depsdiver-action@2cc75599f7397cfcc2b42db0c4d4c34784b10338 # v2.5.3
         with:
           depsdiver-api-url: 'https://depsdiver.com/api'
           depsdiver-token: ${{ secrets.DEPSDIVER_TOKEN }}
@@ -75,7 +75,7 @@ jobs:
 
       - name: Scan dependencies
         id: scan
-        uses: Hunted-Labs/depsdiver-action@20953f2915b648144e30357e91a8a15eaa77cbf0 # v2.5.0
+        uses: Hunted-Labs/depsdiver-action@2cc75599f7397cfcc2b42db0c4d4c34784b10338 # v2.5.3
         with:
           path: '.'                              # Directory(ies) to scan (default: '.'). Accepts multiple, see below
           output-file: 'foci-report.txt'         # Report file name (default: 'deps-foci-report.txt')
