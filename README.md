@@ -1,16 +1,19 @@
 # DepsDiver Dependency FOCI Scanner
 
-A GitHub Action that scans package manager files in your repository and queries the [DepsDiver](https://huntedlabs.com) API to detect Foreign Ownership, Control, or Influence (FOCI) in your dependencies.
+A GitHub Action that scans package manager files in your repository and detects Foreign Ownership, Control, or Influence (FOCI) in your dependencies.
+
+Scanning is performed by the [`diver`](https://huntedlabs.com/diver-cli) CLI. The action downloads a pinned `diver` release at runtime (cached between runs) and formats its results into a GitHub report.
 
 ## Features
 
 - Scans package manager files across all major ecosystems
+- Scans one or more directories in a single run (see [Scanning multiple folders](#scanning-multiple-folders))
 - Prefers lock files over manifests. When a lock file is present, the corresponding manifest is skipped to avoid duplicates and ensure transitive dependencies are included
 - Reports FOCI presence and per-country contribution analysis per package
 - Links directly to the full DepsDiver report for each flagged dependency
 - Generates a markdown report and GitHub Actions step summary
 - Uploads the report as a downloadable artifact
-- Caches API results automatically between runs. Only newly added or changed packages are queried, keeping repeat scans fast
+- Caches FOCI results automatically between runs. Only newly added or changed packages are queried, keeping repeat scans fast
 - Automatically skips `vendor/`, `.git/`, `node_modules/`, `target/`, `build/`, `dist/`, `.idea/`, and `__pycache__/` directories
 
 ## Supported Ecosystems
@@ -48,7 +51,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Scan dependencies
-        uses: Hunted-Labs/depsdiver-action@20953f2915b648144e30357e91a8a15eaa77cbf0 # v2.5.0
+        uses: Hunted-Labs/depsdiver-action@2cc75599f7397cfcc2b42db0c4d4c34784b10338 # v2.5.3
         with:
           depsdiver-api-url: 'https://depsdiver.com/api'
           depsdiver-token: ${{ secrets.DEPSDIVER_TOKEN }}
@@ -72,9 +75,9 @@ jobs:
 
       - name: Scan dependencies
         id: scan
-        uses: Hunted-Labs/depsdiver-action@20953f2915b648144e30357e91a8a15eaa77cbf0 # v2.5.0
+        uses: Hunted-Labs/depsdiver-action@2cc75599f7397cfcc2b42db0c4d4c34784b10338 # v2.5.3
         with:
-          path: '.'                              # Directory to scan (default: '.')
+          path: '.'                              # Directory(ies) to scan (default: '.'). Accepts multiple, see below
           output-file: 'foci-report.txt'         # Report file name (default: 'deps-foci-report.txt')
           artifact-name: 'foci-report'           # Artifact name (default: 'deps-foci-report')
           artifact-retention-days: '7'           # Artifact retention (default: '30')
@@ -104,15 +107,39 @@ For organization-wide access, use an organization secret instead.
 
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
-| `path` | Directory path to scan | No | `.` |
+| `path` | Directory path(s) to scan. Accepts a single path, or multiple paths separated by commas or newlines. | No | `.` |
 | `output-file` | Output file name for the report | No | `deps-foci-report.txt` |
 | `artifact-name` | Name of the uploaded artifact | No | `deps-foci-report` |
 | `artifact-retention-days` | Days to retain the artifact | No | `30` |
-| `depsdiver-api-url` | DepsDiver API base URL | No* | — |
-| `depsdiver-token` | DepsDiver API token | No* | (uses `secrets.DEPSDIVER_TOKEN`) |
+| `depsdiver-api-url` | DepsDiver API base URL | No | `https://depsdiver.com/api` |
+| `depsdiver-token` | DepsDiver API token (set as a secret) | **Yes** | — |
 | `foci-threshold` | FOCI change ratio threshold (0–100%). Only packages exceeding this are flagged. Leave empty to flag all packages with any FOCI data. | No | — |
+| `diver-version` | Version of the `diver` CLI to download | No | `0.3.0` |
 
-\* Without `depsdiver-api-url` and `depsdiver-token` the action will discover and list dependencies but won't query for FOCI data.
+> **A token is required.** The `diver` CLI cannot scan without an API token, so `depsdiver-token` must be provided. Without it the action fails fast with a clear error.
+
+### Scanning multiple folders
+
+The `path` input accepts more than one directory. Separate them with commas, or use a YAML block scalar for one per line. Each folder is scanned with its own `diver` call, and the results are combined into a single report (duplicate packages found in more than one folder are de-duplicated).
+
+```yaml
+# Comma-separated
+- uses: Hunted-Labs/depsdiver-action@<pinned-sha>
+  with:
+    path: 'frontend, backend, services/api'
+    depsdiver-token: ${{ secrets.DEPSDIVER_TOKEN }}
+
+# Or one per line
+- uses: Hunted-Labs/depsdiver-action@<pinned-sha>
+  with:
+    path: |
+      frontend
+      backend
+      services/api
+    depsdiver-token: ${{ secrets.DEPSDIVER_TOKEN }}
+```
+
+Paths are resolved relative to the repository root, and files appear in the report with their folder prefix (e.g. `frontend/package.json`).
 
 ## Outputs
 
