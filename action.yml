@@ -57,7 +57,7 @@ runs:
     # --- Download the diver CLI from the public bucket (cached by version+arch) ---
     - name: Restore diver binary cache
       id: diver-cache
-      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ runner.temp }}/.diver-bin
         key: diver-cli-${{ runner.os }}-${{ runner.arch }}-${{ inputs.diver-version }}
@@ -83,7 +83,7 @@ runs:
 
     - name: Save diver binary cache
       if: steps.diver-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ runner.temp }}/.diver-bin
         key: diver-cli-${{ runner.os }}-${{ runner.arch }}-${{ inputs.diver-version }}
@@ -97,7 +97,7 @@ runs:
         go build -o "${{ runner.temp }}/.depsdiver-bin/render" src/render.go
 
     - name: Restore DepsDiver cache
-      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ runner.temp }}/.depsdiver-cache
         key: depsdiver-${{ runner.os }}-${{ github.run_id }}
@@ -165,7 +165,7 @@ runs:
         cat "$OUTPUT_FILE"
 
     - name: Save DepsDiver cache
-      uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       if: always()
       with:
         path: ${{ runner.temp }}/.depsdiver-cache
