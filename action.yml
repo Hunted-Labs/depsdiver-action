@@ -34,7 +34,7 @@ inputs:
   diver-version:
     description: "Version of the diver CLI to download"
     required: false
-    default: "0.3.1"
+    default: "0.3.2"
 outputs:
   report-file:
     description: "Path to the generated report file"
