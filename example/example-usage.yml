@@ -18,7 +18,7 @@ jobs:
 
       - name: Scan Go imports
         id: scan
-        uses: Hunted-Labs/depsdiver-action@119c5ccd41d042d47fc4cb7e1de8b177758f4841 # v3.0.0 (should use latest version hash)
+        uses: Hunted-Labs/depsdiver-action@baac7503cb6e2adcd01ccf3a13e34a45cebebd9a # v3.0.1 (should use latest version hash)
         with:
           path: "."
           output-file: "go-imports-report.txt"

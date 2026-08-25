@@ -22,6 +22,6 @@ Only the latest major release line receives fixes. Older versions are not mainta
 
 ## Security Considerations for Users
 
-- Always pin to a specific version, ideally a commit SHA (e.g., `@<sha> # v3.0.0`), or at minimum a version tag like `@v3` rather than `@main` in production workflows
+- Always pin to a specific version, ideally a commit SHA (e.g., `@<sha> # v3.0.2`), or at minimum a version tag like `@v3` rather than `@main` in production workflows
 - Store your DepsDiver API token as a GitHub Actions secret, never hardcoded in the workflow file
 - The action only requires read access to your repository. Do not grant it write permissions
