@@ -259,7 +259,7 @@ runs:
           if [ "${SCAN_ERRORED}" = "true" ]; then
             echo "## ⚠️ Dependency FOCI Scan Incomplete" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "> **\`diver\` could not analyze these dependencies.** The counts below are not a clean bill of health — check the scan step's job log for the \`diver\` diagnostics." >> $GITHUB_STEP_SUMMARY
+            echo "> **\`diver\` could not analyze these dependencies.** Check the scan step's job log for the \`diver\` diagnostics." >> $GITHUB_STEP_SUMMARY
           else
             echo "## 🔍 Dependency FOCI Scan Complete" >> $GITHUB_STEP_SUMMARY
           fi
