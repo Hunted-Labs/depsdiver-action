@@ -356,7 +356,18 @@ func renderReport(pkgManagerDeps []PackageManagerDep, pkgManagerResults map[stri
 		fmt.Printf("Total repository FOCI locations: %d\n", totalRepoFoci)
 		fmt.Println()
 
+		nothingAnalyzed := packagesNotFound == len(pkgManagerResults)
+		if nothingAnalyzed {
+			fmt.Println("> **Nothing was analyzed.** Every package came back without a FOCI record,")
+			fmt.Println("> which almost always means the query failed rather than that these")
+			fmt.Println("> dependencies are clean. `FOCI detected: 0` above is not a pass.")
+			fmt.Println()
+		}
+
 		if fociSummary != nil {
+			if nothingAnalyzed {
+				fmt.Fprintf(fociSummary, "<blockquote>❌ <strong>Nothing was analyzed.</strong> All %d package(s) came back without a FOCI record, which almost always means the query failed rather than that these dependencies are clean. <strong>0 FOCI detected is not a pass here.</strong></blockquote>\n\n", packagesNotFound)
+			}
 			fmt.Fprintf(fociSummary, "**Results:** %d passed · %d FOCI detected", passedCount, fociPresentCount)
 			if packagesNotFound > 0 {
 				fmt.Fprintf(fociSummary, " · %d no data available", packagesNotFound)

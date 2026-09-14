@@ -85,10 +85,13 @@ jobs:
           depsdiver-token: ${{ secrets.DEPSDIVER_TOKEN }}
           foci-threshold: '10'                   # Only flag packages with >10% FOCI change ratio
 
+      # Check scan-errored too
       - name: Fail if FOCI detected
-        if: steps.scan.outputs.foci-packages > 0
+        if: steps.scan.outputs.scan-errored == 'false' && steps.scan.outputs.foci-packages > 0
+        env:
+          FOCI: ${{ steps.scan.outputs.foci-packages }}
         run: |
-          echo "FOCI detected in ${{ steps.scan.outputs.foci-packages }} package(s)"
+          echo "FOCI detected in $FOCI package(s)"
           exit 1
 ```
 
@@ -149,6 +152,8 @@ Paths are resolved relative to the repository root, and files appear in the repo
 | `report-file` | Path to the generated report file |
 | `foci-packages` | Number of packages with FOCI detected |
 | `total-packages` | Total number of dependencies found across all package manager files |
+| `no-data-packages` | Number of packages the API returned no FOCI record for. Equal to `total-packages` means nothing was analyzed. |
+| `scan-errored` | `true` when `diver` could not analyze the dependencies. Gate on this rather than on `foci-packages` alone. |
 
 ## Finding Your Results
 

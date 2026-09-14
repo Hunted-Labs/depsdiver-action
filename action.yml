@@ -49,6 +49,12 @@ outputs:
   foci-packages:
     description: "Number of packages with FOCI detected"
     value: ${{ steps.scan.outputs.foci-packages }}
+  no-data-packages:
+    description: "Number of packages the API returned no FOCI record for. Equal to total-packages means nothing was analyzed."
+    value: ${{ steps.scan.outputs.no-data-packages }}
+  scan-errored:
+    description: "'true' when diver could not analyze the dependencies."
+    value: ${{ steps.scan.outputs.scan-errored }}
 runs:
   using: "composite"
   steps:
@@ -200,6 +206,13 @@ runs:
           fi
         fi
 
+        echo "no-data-packages=${NODATA:-0}" >> "$GITHUB_OUTPUT"
+        if [ "$scan_errored" -eq 1 ]; then
+          echo "scan-errored=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "scan-errored=false" >> "$GITHUB_OUTPUT"
+        fi
+
         cat "$OUTPUT_FILE"
 
         # Fail last
@@ -235,13 +248,21 @@ runs:
         FOCI_SUMMARY_PATH: "${{ github.workspace }}/foci-summary.txt"
         TOTAL_PACKAGES: ${{ steps.scan.outputs.total-packages }}
         FOCI_PACKAGES: ${{ steps.scan.outputs.foci-packages }}
+        NO_DATA_PACKAGES: ${{ steps.scan.outputs.no-data-packages }}
+        SCAN_ERRORED: ${{ steps.scan.outputs.scan-errored }}
         FOCI_THRESHOLD: ${{ inputs.foci-threshold }}
         ARTIFACT_NAME: ${{ inputs.artifact-name }}
         ARTIFACT_RETENTION_DAYS: ${{ inputs.artifact-retention-days }}
       run: |
         if [ -f "$REPORT_PATH" ]; then
-          # Header with icon
-          echo "## 🔍 Dependency FOCI Scan Complete" >> $GITHUB_STEP_SUMMARY
+          # Different header for when a scan error happens vs. true completion
+          if [ "${SCAN_ERRORED}" = "true" ]; then
+            echo "## ⚠️ Dependency FOCI Scan Incomplete" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "> **\`diver\` could not analyze these dependencies.** The counts below are not a clean bill of health — check the scan step's job log for the \`diver\` diagnostics." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## 🔍 Dependency FOCI Scan Complete" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
 
           # Summary statistics table
@@ -249,6 +270,9 @@ runs:
           echo "<tr><th>Metric</th><th>Count</th></tr>" >> $GITHUB_STEP_SUMMARY
           echo "<tr><td>Total Packages</td><td><strong>${TOTAL_PACKAGES}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
           echo "<tr><td>Packages with FOCI</td><td><strong>${FOCI_PACKAGES}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
+          if [ "${NO_DATA_PACKAGES:-0}" -gt "0" ]; then
+            echo "<tr><td>No FOCI data returned</td><td><strong>${NO_DATA_PACKAGES}</strong></td></tr>" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "</table>" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
