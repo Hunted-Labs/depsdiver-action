@@ -35,6 +35,10 @@ inputs:
     description: "Version of the diver CLI to download"
     required: false
     default: "0.3.2"
+  fail-on-scan-error:
+    description: "Fail the step when diver could not analyze the dependencies (API unreachable, rate limited, auth rejected). When false, the failure is logged as a warning instead."
+    required: false
+    default: "true"
 outputs:
   report-file:
     description: "Path to the generated report file"
@@ -118,6 +122,7 @@ runs:
         SCAN_BASE_DIR: "${{ github.workspace }}"
         OUTPUT_FILE: "${{ github.workspace }}/${{ inputs.output-file }}"
         REPORT_ARTIFACT_NAME: "${{ inputs.output-file }}"
+        FAIL_ON_SCAN_ERROR: ${{ inputs.fail-on-scan-error }}
       run: |
         set -euo pipefail
         DIVER="${{ runner.temp }}/.diver-bin/diver"
@@ -131,8 +136,9 @@ runs:
         # Parse the path input (single path, or comma/newline-separated list)
         # into a newline-delimited folders file (order preserved).
         JSON_DIR="${{ runner.temp }}/diver-json"
+        RAW_DIR="${{ runner.temp }}/diver-raw"
         FOLDERS_FILE="${{ runner.temp }}/diver-folders.txt"
-        mkdir -p "$JSON_DIR"
+        mkdir -p "$JSON_DIR" "$RAW_DIR"
         : > "$FOLDERS_FILE"
         while IFS= read -r raw; do
           p="$(printf '%s' "$raw" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
@@ -142,12 +148,36 @@ runs:
         if [ ! -s "$FOLDERS_FILE" ]; then printf '.\n' > "$FOLDERS_FILE"; fi
 
         # Run diver per folder; write JSON as 0.json, 1.json, ... (paired by line).
+        #
+        # diver logs its diagnostics to stdout on the lines above the JSON object,
+        # and exits 0 even when the FOCI query fails which leaves every dependency
+        # with no foci record. Renders identically to a clean tree. So keep
+        # what it printed, and never trust the exit code alone.
+        scan_errored=0
         i=0
         while IFS= read -r folder; do
           echo "Scanning $folder ..."
-          # Extract just the JSON object
-          "$DIVER" scan "${SCAN_BASE_DIR}/${folder}" --output json --url "$DEPSDIVER_API_URL" 2>/dev/null \
-            | sed -n '/^{/,/^}/p' > "$JSON_DIR/$i.json"
+          rc=0
+          "$DIVER" scan "${SCAN_BASE_DIR}/${folder}" --output json --url "$DEPSDIVER_API_URL" \
+            > "$RAW_DIR/$i.out" 2> "$RAW_DIR/$i.err" || rc=$?
+
+          sed -n '/^{/,/^}/p' "$RAW_DIR/$i.out" > "$JSON_DIR/$i.json"
+          awk 'seen { next } /^\{/ { seen = 1; next } { print }' "$RAW_DIR/$i.out" > "$RAW_DIR/$i.diag"
+          cat "$RAW_DIR/$i.err" >> "$RAW_DIR/$i.diag"
+
+          if [ -s "$RAW_DIR/$i.diag" ]; then
+            echo "::group::diver diagnostics for $folder"
+            cat "$RAW_DIR/$i.diag"
+            echo "::endgroup::"
+          fi
+
+          if [ "$rc" -ne 0 ] \
+            || grep -qi 'foci query failed' "$RAW_DIR/$i.diag" \
+            || [ ! -s "$JSON_DIR/$i.json" ]; then
+            echo "::error::diver could not analyze '$folder' (exit $rc), its packages will report \"no data available\". This is a failed query, not a clean dependency tree."
+            scan_errored=1
+          fi
+
           i=$((i+1))
         done < "$FOLDERS_FILE"
 
@@ -157,12 +187,29 @@ runs:
         if [ -f "$OUTPUT_FILE" ]; then
           TOTAL=$(grep -E "^Package manager dependencies found:" "$OUTPUT_FILE" | grep -oE '[0-9]+' || echo "0")
           FOCI=$(grep -E "^FOCI detected:" "$OUTPUT_FILE" | grep -oE '[0-9]+' || echo "0")
+          NODATA=$(grep -E "^No data available:" "$OUTPUT_FILE" | grep -oE '[0-9]+' || echo "0")
           echo "total-packages=$TOTAL" >> "$GITHUB_OUTPUT"
           echo "foci-packages=$FOCI" >> "$GITHUB_OUTPUT"
           echo "report-file=$REPORT_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+
+          # Backstop in case diver's warning text changes: packages were found,
+          # but none of them came back analyzed
+          if [ "${TOTAL:-0}" -gt 0 ] && [ "${NODATA:-0}" -eq "${TOTAL:-0}" ]; then
+            echo "::error::all $TOTAL package(s) came back without FOCI data, nothing was analyzed. Treat this as a failed scan, not as \"FOCI detected: 0\"."
+            scan_errored=1
+          fi
         fi
 
         cat "$OUTPUT_FILE"
+
+        # Fail last
+        if [ "$scan_errored" -eq 1 ]; then
+          if [ "${FAIL_ON_SCAN_ERROR}" = "false" ]; then
+            echo "::warning::the scan did not complete"
+          else
+            exit 1
+          fi
+        fi
 
     - name: Save DepsDiver cache
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
