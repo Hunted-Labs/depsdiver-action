@@ -55,18 +55,20 @@ runs:
         cache: false
 
     # --- Download the diver CLI from the public bucket (cached by version+arch) ---
-    - name: Restore diver binary cache
+    # The archive is cached rather than the unpacked binary, so the checksum below
+    # runs on cache hits too and a poisoned cache cannot supply an executable.
+    - name: Restore diver download cache
       id: diver-cache
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: ${{ runner.temp }}/.diver-bin
+        path: ${{ runner.temp }}/diver-dl
         key: diver-cli-${{ runner.os }}-${{ runner.arch }}-${{ inputs.diver-version }}
 
-    - name: Download diver
-      if: steps.diver-cache.outputs.cache-hit != 'true'
+    - name: Download and verify diver
       shell: bash
       env:
         DIVER_VERSION: ${{ inputs.diver-version }}
+        ACTION_PATH: ${{ github.action_path }}
       run: |
         set -euo pipefail
         case "$(uname -m)" in
@@ -74,18 +76,30 @@ runs:
           aarch64 | arm64)   ARCH="arm64" ;;
           *) echo "::error::unsupported arch $(uname -m)"; exit 1 ;;
         esac
-        mkdir -p "${{ runner.temp }}/.diver-bin"
-        URL="https://hl-tools.s3.us-east-1.amazonaws.com/diver/${DIVER_VERSION}/diver_v${DIVER_VERSION}_Linux_${ARCH}.tar.gz"
-        echo "Downloading $URL"
-        curl -fSL "$URL" -o "${{ runner.temp }}/diver.tar.gz"
-        tar -xzf "${{ runner.temp }}/diver.tar.gz" -C "${{ runner.temp }}/.diver-bin" diver
+
+        PINS="${ACTION_PATH}/checksums/${DIVER_VERSION}.txt"
+        if [ ! -f "$PINS" ]; then
+          echo "::error::no pinned checksums for diver ${DIVER_VERSION}; this action only runs versions with digests committed under checksums/"
+          exit 1
+        fi
+
+        mkdir -p "${{ runner.temp }}/diver-dl" "${{ runner.temp }}/.diver-bin"
+        cd "${{ runner.temp }}/diver-dl"
+        TARBALL="diver_v${DIVER_VERSION}_Linux_${ARCH}.tar.gz"
+        if [ ! -f "$TARBALL" ]; then
+          echo "Downloading https://hl-tools.s3.us-east-1.amazonaws.com/diver/${DIVER_VERSION}/${TARBALL}"
+          curl -fSL "https://hl-tools.s3.us-east-1.amazonaws.com/diver/${DIVER_VERSION}/${TARBALL}" -o "$TARBALL"
+        fi
+        sha256sum --ignore-missing -c "$PINS"
+
+        tar -xzf "$TARBALL" -C "${{ runner.temp }}/.diver-bin" diver
         chmod +x "${{ runner.temp }}/.diver-bin/diver"
 
-    - name: Save diver binary cache
+    - name: Save diver download cache
       if: steps.diver-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: ${{ runner.temp }}/.diver-bin
+        path: ${{ runner.temp }}/diver-dl
         key: diver-cli-${{ runner.os }}-${{ runner.arch }}-${{ inputs.diver-version }}
 
     # --- Build the tiny JSON report renderer ---
