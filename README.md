@@ -85,10 +85,13 @@ jobs:
           depsdiver-token: ${{ secrets.DEPSDIVER_TOKEN }}
           foci-threshold: '10'                   # Only flag packages with >10% FOCI change ratio
 
+      # Check scan-errored too
       - name: Fail if FOCI detected
-        if: steps.scan.outputs.foci-packages > 0
+        if: steps.scan.outputs.scan-errored == 'false' && steps.scan.outputs.foci-packages > 0
+        env:
+          FOCI: ${{ steps.scan.outputs.foci-packages }}
         run: |
-          echo "FOCI detected in ${{ steps.scan.outputs.foci-packages }} package(s)"
+          echo "FOCI detected in $FOCI package(s)"
           exit 1
 ```
 
@@ -115,6 +118,7 @@ For organization-wide access, use an organization secret instead.
 | `depsdiver-token` | DepsDiver API token (set as a secret) | **Yes** | — |
 | `foci-threshold` | FOCI change ratio threshold (0–100%). Only packages exceeding this are flagged. Leave empty to flag all packages with any FOCI data. | No | — |
 | `diver-version` | Version of the `diver` CLI to download. Must have digests committed under [`checksums/`](checksums/). See [Binary verification](#binary-verification). | No | `0.3.2` |
+| `fail-on-scan-error` | Fail the step when `diver` could not analyze the dependencies (API unreachable, rate limited, auth rejected). When false, the failure is logged as a warning instead. | No | `true` |
 
 > **A token is required.** The `diver` CLI cannot scan without an API token, so `depsdiver-token` must be provided. Without it the action fails fast with a clear error.
 
@@ -148,6 +152,8 @@ Paths are resolved relative to the repository root, and files appear in the repo
 | `report-file` | Path to the generated report file |
 | `foci-packages` | Number of packages with FOCI detected |
 | `total-packages` | Total number of dependencies found across all package manager files |
+| `no-data-packages` | Number of packages the API returned no FOCI record for. Equal to `total-packages` means nothing was analyzed. |
+| `scan-errored` | `true` when `diver` could not analyze the dependencies. Gate on this rather than on `foci-packages` alone. |
 
 ## Finding Your Results
 
