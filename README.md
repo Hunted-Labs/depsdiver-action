@@ -225,14 +225,11 @@ The digests live in this repo instead of being downloaded with the archive. A ch
 next to the archive proves nothing if that bucket is compromised. This means pinning the action to a
 commit SHA also pins the binary it runs.
 
-If `diver-version` has no file under `checksums/`, the action fails instead of running an unverified
-binary. To add a version, commit its digests. Check them against an archive you downloaded yourself
-first:
-
-```
-curl -fsSL "https://hl-tools.s3.us-east-1.amazonaws.com/diver/<version>/diver_<version>_checksums.txt" \
-  -o "checksums/<version>.txt"
-```
+If `diver-version` has no file under `checksums/`, the action fails instead of running an unverified binary.
+To add a version, verify its archive digest through an independently trusted source, such as a
+signed release or build provenance, then commit the verified digest in `checksums/<version>.txt`.
+Do not treat a checksum downloaded from the same S3 bucket as independent verification: whoever
+can replace both the archive and checksum can make them match.
 
 ## License
 

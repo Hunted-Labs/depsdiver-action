@@ -90,7 +90,18 @@ runs:
           echo "Downloading https://hl-tools.s3.us-east-1.amazonaws.com/diver/${DIVER_VERSION}/${TARBALL}"
           curl -fSL "https://hl-tools.s3.us-east-1.amazonaws.com/diver/${DIVER_VERSION}/${TARBALL}" -o "$TARBALL"
         fi
-        sha256sum --ignore-missing -c "$PINS"
+        if ! CHECKSUM_LINE="$(awk -v file="$TARBALL" '
+          $2 == file { print; count++ }
+          END { if (count != 1) exit 1 }
+        ' "$PINS")"; then
+          echo "::error::expected exactly one checksum entry for ${TARBALL} in ${PINS}"
+          exit 1
+        fi
+
+        if ! printf '%s\n' "$CHECKSUM_LINE" | sha256sum --check --status; then
+          echo "::error::checksum verification failed for ${TARBALL}"
+          exit 1
+        fi
 
         tar -xzf "$TARBALL" -C "${{ runner.temp }}/.diver-bin" diver
         chmod +x "${{ runner.temp }}/.diver-bin/diver"
