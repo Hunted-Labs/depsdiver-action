@@ -20,6 +20,16 @@ Only the latest major release line receives fixes. Older versions are not mainta
 
 `@v3` is a breaking change from `@v2`: scanning is performed by the [`diver`](https://huntedlabs.com/diver-cli) CLI (downloaded at runtime) and `depsdiver-token` is now **required**. Upgrading from v2 without providing a token will fail.
 
+## Runtime Binary Verification
+
+The `diver` CLI is downloaded at runtime from a public S3 bucket. Before it is extracted or run, the archive is checked against SHA-256 digests committed under `checksums/<version>.txt`. A mismatch
+fails the run.
+
+Because the digests are reviewed in git rather than downloaded with the archive, a compromised bucket cannot swap in a different binary, and pinning this action to a commit SHA pins the executable too.
+Versions with no committed digests are refused.
+
+The cache holds the release archive, so the check also runs on cache hits. No executable runs without being verified first. See [Binary verification](README.md#binary-verification).
+
 ## Security Considerations for Users
 
 - Always pin to a specific version, ideally a commit SHA (e.g., `@<sha> # v3.0.2`), or at minimum a version tag like `@v3` rather than `@main` in production workflows

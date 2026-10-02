@@ -117,7 +117,7 @@ For organization-wide access, use an organization secret instead.
 | `depsdiver-api-url` | DepsDiver API base URL | No | `https://depsdiver.com/api` |
 | `depsdiver-token` | DepsDiver API token (set as a secret) | **Yes** | — |
 | `foci-threshold` | FOCI change ratio threshold (0–100%). Only packages exceeding this are flagged. Leave empty to flag all packages with any FOCI data. | No | — |
-| `diver-version` | Version of the `diver` CLI to download | No | `0.3.2` |
+| `diver-version` | Version of the `diver` CLI to download. Must have digests committed under [`checksums/`](checksums/). See [Binary verification](#binary-verification). | No | `0.3.2` |
 | `fail-on-scan-error` | Fail the step when `diver` could not analyze the dependencies (API unreachable, rate limited, auth rejected). When false, the failure is logged as a warning instead. | No | `true` |
 
 > **A token is required.** The `diver` CLI cannot scan without an API token, so `depsdiver-token` must be provided. Without it the action fails fast with a clear error.
@@ -221,6 +221,21 @@ Total repository FOCI locations: 3
 ## Versioning
 
 It is highly suggested to pin to a specific git commit hash. See `example` directory for how to do this.
+
+## Binary verification
+
+The `diver` CLI is downloaded at runtime and checked against the SHA-256 digests in
+[`checksums/<version>.txt`](checksums/) before it runs. The workflow cache holds the release archive rather than the unpacked binary, so this check runs on every job, cache hit or not.
+
+The digests live in this repo instead of being downloaded with the archive. A checksum file hosted
+next to the archive proves nothing if that bucket is compromised. This means pinning the action to a
+commit SHA also pins the binary it runs.
+
+If `diver-version` has no file under `checksums/`, the action fails instead of running an unverified binary.
+To add a version, verify its archive digest through an independently trusted source, such as a
+signed release or build provenance, then commit the verified digest in `checksums/<version>.txt`.
+Do not treat a checksum downloaded from the same S3 bucket as independent verification: whoever
+can replace both the archive and checksum can make them match.
 
 ## License
 
