@@ -39,18 +39,34 @@ type diverFoci struct {
 	FociStats      []diverFociStat       `json:"foci_stats"`
 }
 
+// diver >= 0.3.3 classifies every dependency
+const (
+	statusPresent    = "present"
+	statusNotPresent = "not_present"
+	statusUnknown    = "unknown"
+)
+
 type diverDep struct {
 	Name       string     `json:"name"`
 	Version    string     `json:"version"`
 	Ecosystem  string     `json:"ecosystem"`
 	SourceFile string     `json:"source_file"`
 	Suppressed bool       `json:"suppressed"`
+	FOCIStatus string     `json:"foci_status"`
 	FOCI       *diverFoci `json:"foci"`
 }
 
+// A failure that left the scan incomplete without aborting it. Absent from
+// diver < 0.3.3, which reported query failures only as a log line.
+type diverScanError struct {
+	Stage   string `json:"stage"`
+	Message string `json:"message"`
+}
+
 type diverScan struct {
-	ScannedPath  string     `json:"scanned_path"`
-	Dependencies []diverDep `json:"dependencies"`
+	ScannedPath  string           `json:"scanned_path"`
+	Dependencies []diverDep       `json:"dependencies"`
+	Errors       []diverScanError `json:"errors"`
 }
 
 type inputEntry struct {
@@ -140,6 +156,7 @@ func main() {
 	var pkgManagerDeps []PackageManagerDep
 	pkgManagerResults := make(map[string]*PackageInfo)
 	seenDep := make(map[string]bool)
+	var scanErrors []string
 
 	for _, in := range inputs {
 		data, err := os.ReadFile(in.JSONFile)
@@ -151,6 +168,20 @@ func main() {
 		if err := json.Unmarshal(data, &scan); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: cannot parse %q: %v\n", in.JSONFile, err)
 			continue
+		}
+
+		// An error here means the lookup failed, so a missing FOCI record
+		// means "we don't know", not "nothing found".
+		scanFailed := ""
+		for _, e := range scan.Errors {
+			where := in.Folder
+			if where == "" {
+				where = "."
+			}
+			scanErrors = append(scanErrors, fmt.Sprintf("%s [%s] %s", where, e.Stage, e.Message))
+			if scanFailed == "" {
+				scanFailed = "FOCI query failed: " + e.Message
+			}
 		}
 
 		for _, d := range scan.Dependencies {
@@ -178,18 +209,35 @@ func main() {
 			if _, ok := pkgManagerResults[key]; ok {
 				continue
 			}
-			pkgManagerResults[key] = toPackageInfo(d)
+			pkgManagerResults[key] = toPackageInfo(d, scanFailed)
 		}
 	}
 
-	renderReport(pkgManagerDeps, pkgManagerResults, fociThreshold, depsDiverAPIURL)
+	renderReport(pkgManagerDeps, pkgManagerResults, fociThreshold, depsDiverAPIURL, scanErrors)
 }
 
 // toPackageInfo converts a diver dependency's raw foci object into the
-// PackageInfo the report code expects. A nil foci object means diver got no
-// FOCI record for the package — treated as "no data available".
-func toPackageInfo(d diverDep) *PackageInfo {
+// PackageInfo the report code expects.
+//
+// A package with no FOCI record is either genuinely absent from the API or it
+// was a failed query. diver >= 0.3.3 lets us tell the two apart: foci_status
+// says the record is missing and scanFailed says why. Older builds don't, so a
+// missing record keeps its old meaning of "not found".
+func toPackageInfo(d diverDep, scanFailed string) *PackageInfo {
+	switch d.FOCIStatus {
+	case statusUnknown:
+		if scanFailed != "" {
+			return &PackageInfo{Name: d.Name, Error: scanFailed}
+		}
+		return &PackageInfo{Name: d.Name, Error: "package not found in API response"}
+	case statusNotPresent, statusPresent:
+		// Fall through
+	}
+
 	if d.FOCI == nil {
+		if scanFailed != "" {
+			return &PackageInfo{Name: d.Name, Error: scanFailed}
+		}
 		return &PackageInfo{Name: d.Name, Error: "package not found in API response"}
 	}
 	var changeRatio float64
@@ -219,7 +267,7 @@ func toPackageInfo(d diverDep) *PackageInfo {
 	}
 }
 
-func renderReport(pkgManagerDeps []PackageManagerDep, pkgManagerResults map[string]*PackageInfo, fociThreshold float64, depsDiverAPIURL string) {
+func renderReport(pkgManagerDeps []PackageManagerDep, pkgManagerResults map[string]*PackageInfo, fociThreshold float64, depsDiverAPIURL string, scanErrors []string) {
 	fociPresentCount := 0
 	totalRepoFoci := 0
 	packagesNotFound := 0
@@ -356,8 +404,18 @@ func renderReport(pkgManagerDeps []PackageManagerDep, pkgManagerResults map[stri
 		fmt.Printf("Total repository FOCI locations: %d\n", totalRepoFoci)
 		fmt.Println()
 
-		nothingAnalyzed := packagesNotFound == len(pkgManagerResults)
-		if nothingAnalyzed {
+		// diver tells the failure and why
+		if len(scanErrors) > 0 {
+			fmt.Printf("> **Scan incomplete — %d package(s) could not be analyzed.** `FOCI detected: %d`\n", packagesWithErrors, fociPresentCount)
+			fmt.Println("> below counts only the packages that were successfully looked up.")
+			fmt.Println(">")
+			for _, e := range scanErrors {
+				fmt.Printf("> - `%s`\n", e)
+			}
+			fmt.Println()
+		} else if packagesNotFound == len(pkgManagerResults) {
+			// No structured error, so this is either an old diver that could not
+			// report one, or a dependency set the API has no records for.
 			fmt.Println("> **Nothing was analyzed.** Every package came back without a FOCI record,")
 			fmt.Println("> which almost always means the query failed rather than that these")
 			fmt.Println("> dependencies are clean. `FOCI detected: 0` above is not a pass.")
@@ -365,12 +423,23 @@ func renderReport(pkgManagerDeps []PackageManagerDep, pkgManagerResults map[stri
 		}
 
 		if fociSummary != nil {
-			if nothingAnalyzed {
+			switch {
+			case len(scanErrors) > 0:
+				fmt.Fprintf(fociSummary, "<blockquote>❌ <strong>Scan incomplete.</strong> %d package(s) could not be analyzed, so <strong>%d FOCI detected covers only the %d package(s) that were looked up.</strong><ul>\n",
+					packagesWithErrors, fociPresentCount, len(pkgManagerResults)-packagesWithErrors)
+				for _, e := range scanErrors {
+					fmt.Fprintf(fociSummary, "<li><code>%s</code></li>\n", e)
+				}
+				fmt.Fprintf(fociSummary, "</ul></blockquote>\n\n")
+			case packagesNotFound == len(pkgManagerResults):
 				fmt.Fprintf(fociSummary, "<blockquote>❌ <strong>Nothing was analyzed.</strong> All %d package(s) came back without a FOCI record, which almost always means the query failed rather than that these dependencies are clean. <strong>0 FOCI detected is not a pass here.</strong></blockquote>\n\n", packagesNotFound)
 			}
 			fmt.Fprintf(fociSummary, "**Results:** %d passed · %d FOCI detected", passedCount, fociPresentCount)
 			if packagesNotFound > 0 {
 				fmt.Fprintf(fociSummary, " · %d no data available", packagesNotFound)
+			}
+			if packagesWithErrors > 0 {
+				fmt.Fprintf(fociSummary, " · %d not analyzed", packagesWithErrors)
 			}
 			fmt.Fprintf(fociSummary, "\n\n")
 			writeFociTriageTable(fociSummary, pkgManagerDeps, pkgManagerResults, fociThreshold, depsDiverAPIURL)
