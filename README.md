@@ -117,7 +117,7 @@ For organization-wide access, use an organization secret instead.
 | `depsdiver-api-url` | DepsDiver API base URL | No | `https://depsdiver.com/api` |
 | `depsdiver-token` | DepsDiver API token (set as a secret) | **Yes** | — |
 | `foci-threshold` | FOCI change ratio threshold (0–100%). Only packages exceeding this are flagged. Leave empty to flag all packages with any FOCI data. | No | — |
-| `diver-version` | Version of the `diver` CLI to download. Must have digests committed under [`checksums/`](checksums/). See [Binary verification](#binary-verification). | No | `0.3.3` |
+| `diver-version` | Version of the `diver` CLI to download. Must have digests committed under [`checksums/`](checksums/). See [Binary verification](#binary-verification). | No | `0.3.4` |
 | `fail-on-scan-error` | Fail the step when `diver` could not analyze the dependencies (API unreachable, rate limited, auth rejected). When false, the failure is logged as a warning instead. | No | `true` |
 
 > **A token is required.** The `diver` CLI cannot scan without an API token, so `depsdiver-token` must be provided. Without it the action fails fast with a clear error.

@@ -34,7 +34,7 @@ inputs:
   diver-version:
     description: "Version of the diver CLI to download"
     required: false
-    default: "0.3.3"
+    default: "0.3.4"
   fail-on-scan-error:
     description: "Fail the step when diver could not analyze the dependencies (API unreachable, rate limited, auth rejected). When false, the failure is logged as a warning instead."
     required: false
