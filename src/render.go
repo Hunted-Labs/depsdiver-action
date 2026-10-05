@@ -180,7 +180,7 @@ func main() {
 			}
 			scanErrors = append(scanErrors, fmt.Sprintf("%s [%s] %s", where, e.Stage, e.Message))
 			if scanFailed == "" {
-				scanFailed = "FOCI query failed: " + e.Message
+				scanFailed = e.Message
 			}
 		}
 
@@ -404,10 +404,17 @@ func renderReport(pkgManagerDeps []PackageManagerDep, pkgManagerResults map[stri
 		fmt.Printf("Total repository FOCI locations: %d\n", totalRepoFoci)
 		fmt.Println()
 
-		// diver tells the failure and why
+		// diver tells the failure and why. Whether any package survived the
+		// failure changes what the counts mean
+		analyzed := len(pkgManagerResults) - packagesWithErrors
 		if len(scanErrors) > 0 {
-			fmt.Printf("> **Scan incomplete — %d package(s) could not be analyzed.** `FOCI detected: %d`\n", packagesWithErrors, fociPresentCount)
-			fmt.Println("> below counts only the packages that were successfully looked up.")
+			if analyzed == 0 {
+				fmt.Printf("> **Nothing was analyzed.** All %d package(s) failed to look up, so\n", packagesWithErrors)
+				fmt.Println("> `FOCI detected: 0` above means nothing was checked — it is not a pass.")
+			} else {
+				fmt.Printf("> **Scan incomplete — %d of %d package(s) could not be analyzed.**\n", packagesWithErrors, len(pkgManagerResults))
+				fmt.Printf("> `FOCI detected: %d` above covers only the %d that were looked up.\n", fociPresentCount, analyzed)
+			}
 			fmt.Println(">")
 			for _, e := range scanErrors {
 				fmt.Printf("> - `%s`\n", e)
@@ -425,8 +432,12 @@ func renderReport(pkgManagerDeps []PackageManagerDep, pkgManagerResults map[stri
 		if fociSummary != nil {
 			switch {
 			case len(scanErrors) > 0:
-				fmt.Fprintf(fociSummary, "<blockquote>❌ <strong>Scan incomplete.</strong> %d package(s) could not be analyzed, so <strong>%d FOCI detected covers only the %d package(s) that were looked up.</strong><ul>\n",
-					packagesWithErrors, fociPresentCount, len(pkgManagerResults)-packagesWithErrors)
+				if analyzed == 0 {
+					fmt.Fprintf(fociSummary, "<blockquote>❌ <strong>Nothing was analyzed.</strong> All %d package(s) failed to look up, so <strong>0 FOCI detected means nothing was checked — it is not a pass.</strong><ul>\n", packagesWithErrors)
+				} else {
+					fmt.Fprintf(fociSummary, "<blockquote>❌ <strong>Scan incomplete.</strong> %d of %d package(s) could not be analyzed, so <strong>%d FOCI detected covers only the %d that were looked up.</strong><ul>\n",
+						packagesWithErrors, len(pkgManagerResults), fociPresentCount, analyzed)
+				}
 				for _, e := range scanErrors {
 					fmt.Fprintf(fociSummary, "<li><code>%s</code></li>\n", e)
 				}
@@ -540,7 +551,7 @@ func renderReport(pkgManagerDeps []PackageManagerDep, pkgManagerResults map[stri
 					if isNotFound(result.Error) {
 						fmt.Printf("- `%s` (no data available)\n", dep.Name)
 					} else {
-						fmt.Printf("- `%s` (API error: %s)\n", dep.Name, result.Error)
+						fmt.Printf("- `%s` (not analyzed)\n", dep.Name)
 					}
 				} else {
 					fmt.Printf("- `%s`\n", dep.Name)
