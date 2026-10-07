@@ -34,7 +34,7 @@ inputs:
   diver-version:
     description: "Version of the diver CLI to download"
     required: false
-    default: "0.3.2"
+    default: "0.3.4"
   fail-on-scan-error:
     description: "Fail the step when diver could not analyze the dependencies (API unreachable, rate limited, auth rejected). When false, the failure is logged as a warning instead."
     required: false
@@ -218,7 +218,12 @@ runs:
         if [ -f "$OUTPUT_FILE" ]; then
           TOTAL=$(grep -E "^Package manager dependencies found:" "$OUTPUT_FILE" | grep -oE '[0-9]+' || echo "0")
           FOCI=$(grep -E "^FOCI detected:" "$OUTPUT_FILE" | grep -oE '[0-9]+' || echo "0")
-          NODATA=$(grep -E "^No data available:" "$OUTPUT_FILE" | grep -oE '[0-9]+' || echo "0")
+          # Two ways a package ends up without a FOCI record: the API has none
+          # for it, or the query never completed. diver >= 0.3.3 lets render
+          # separate them but either way the package was not analyzed.
+          NORECORD=$(grep -E "^No data available:" "$OUTPUT_FILE" | grep -oE '[0-9]+' || echo "0")
+          NOTQUERIED=$(grep -E "^API errors:" "$OUTPUT_FILE" | grep -oE '[0-9]+' || echo "0")
+          NODATA=$(( ${NORECORD:-0} + ${NOTQUERIED:-0} ))
           echo "total-packages=$TOTAL" >> "$GITHUB_OUTPUT"
           echo "foci-packages=$FOCI" >> "$GITHUB_OUTPUT"
           echo "report-file=$REPORT_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
